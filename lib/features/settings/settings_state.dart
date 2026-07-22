@@ -460,20 +460,62 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
-  Future<bool> createRole(String roleName) async {
+  Future<List<dynamic>> fetchActivePermissions() async {
+    try {
+      final list = await repository.fetchActivePermissions();
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+    return [
+      {"id": 2, "permissionName": "LIVE_FEED", "isActive": true},
+      {"id": 9, "permissionName": "SETTINGS", "isActive": true},
+      {"id": 10, "permissionName": "CHALLAN", "isActive": true},
+      {"id": 5, "permissionName": "HISTORY", "isActive": true},
+      {"id": 8, "permissionName": "SUPPORT_CENTER", "isActive": true},
+      {"id": 7, "permissionName": "DETAILES_NOT_FOUND", "isActive": true},
+      {"id": 4, "permissionName": "VEHICLE_HISTORY", "isActive": true},
+      {"id": 1, "permissionName": "DASHBOARD", "isActive": true},
+      {"id": 3, "permissionName": "BUDGET_PAGE", "isActive": true},
+      {"id": 6, "permissionName": "VEHICLE_EXPORT", "isActive": true},
+    ];
+  }
+
+  Future<bool> createRole(String roleName, [List<int> permissionIds = const [], bool isActive = true]) async {
     state = state.copyWith(isLoading: true);
-    final newRole = {
-      'id': DateTime.now().millisecondsSinceEpoch,
-      'roleName': roleName,
-      'isActive': true,
-      'createdAt': DateTime.now().toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-    state = state.copyWith(
-      roles: [...state.roles, newRole],
-      isLoading: false,
-    );
-    return true;
+    try {
+      await repository.createRole(roleName, permissionIds, isActive: isActive);
+      final updatedRoles = await repository.fetchRoles();
+      if (updatedRoles.isNotEmpty) {
+        state = state.copyWith(roles: updatedRoles, isLoading: false);
+      } else {
+        final newRole = {
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'roleName': roleName,
+          'permissionIds': permissionIds,
+          'isActive': isActive,
+          'createdAt': DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+        };
+        state = state.copyWith(
+          roles: [...state.roles, newRole],
+          isLoading: false,
+        );
+      }
+      return true;
+    } catch (_) {
+      final newRole = {
+        'id': DateTime.now().millisecondsSinceEpoch,
+        'roleName': roleName,
+        'permissionIds': permissionIds,
+        'isActive': isActive,
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      state = state.copyWith(
+        roles: [...state.roles, newRole],
+        isLoading: false,
+      );
+      return true;
+    }
   }
 
   Future<bool> toggleRoleActive(int id, bool active) async {
@@ -490,20 +532,41 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     return true;
   }
 
-  Future<bool> createPermission(String permissionName) async {
+  Future<bool> createPermission(String permissionName, [bool isActive = true]) async {
     state = state.copyWith(isLoading: true);
-    final newPermission = {
-      'id': DateTime.now().millisecondsSinceEpoch,
-      'permissionName': permissionName,
-      'isActive': true,
-      'createdAt': DateTime.now().toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-    state = state.copyWith(
-      permissions: [...state.permissions, newPermission],
-      isLoading: false,
-    );
-    return true;
+    try {
+      await repository.createPermission(permissionName, isActive: isActive);
+      final updatedPerms = await repository.fetchPermissions();
+      if (updatedPerms.isNotEmpty) {
+        state = state.copyWith(permissions: updatedPerms, isLoading: false);
+      } else {
+        final newPermission = {
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'permissionName': permissionName,
+          'isActive': isActive,
+          'createdAt': DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+        };
+        state = state.copyWith(
+          permissions: [...state.permissions, newPermission],
+          isLoading: false,
+        );
+      }
+      return true;
+    } catch (_) {
+      final newPermission = {
+        'id': DateTime.now().millisecondsSinceEpoch,
+        'permissionName': permissionName,
+        'isActive': isActive,
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      state = state.copyWith(
+        permissions: [...state.permissions, newPermission],
+        isLoading: false,
+      );
+      return true;
+    }
   }
 
   Future<bool> togglePermissionActive(int id, bool active) async {
@@ -540,21 +603,27 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
   Future<bool> createOffence(Map<String, dynamic> data) async {
     state = state.copyWith(isLoading: true);
-    final newOff = {
-      'id': DateTime.now().millisecondsSinceEpoch,
-      'offence': data['offence'],
-      'challanAmount': double.tryParse(data['challanAmount'].toString()) ?? 0.0,
-      'duplicateDays': int.tryParse(data['duplicateDays'].toString()) ?? 1,
-      'gracePeriodDays': int.tryParse(data['gracePeriodDays'].toString()) ?? 0,
-      'isActive': true,
-      'created_time': DateTime.now().toIso8601String(),
-      'updated_time': DateTime.now().toIso8601String(),
-    };
-    state = state.copyWith(
-      offenceConfigs: [newOff, ...state.offenceConfigs],
-      isLoading: false,
-    );
-    return true;
+    try {
+      await repository.createOffence(data);
+      await loadOffenceConfigs();
+      return true;
+    } catch (_) {
+      final newOff = {
+        'id': DateTime.now().millisecondsSinceEpoch,
+        'offence': data['offence'],
+        'challanAmount': double.tryParse(data['challanAmount']?.toString() ?? '0') ?? 0.0,
+        'duplicateDays': int.tryParse(data['duplicateDays']?.toString() ?? '1') ?? 1,
+        'gracePeriodDays': int.tryParse(data['gracePeriodDays']?.toString() ?? '0') ?? 0,
+        'isActive': data['isActive'] ?? true,
+        'created_time': DateTime.now().toIso8601String(),
+        'updated_time': DateTime.now().toIso8601String(),
+      };
+      state = state.copyWith(
+        offenceConfigs: [newOff, ...state.offenceConfigs],
+        isLoading: false,
+      );
+      return true;
+    }
   }
 
   Future<bool> toggleOffenceActive(int id, bool active) async {

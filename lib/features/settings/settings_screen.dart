@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/widgets/loading_overlay.dart';
+import '../../core/widgets/page_header_banner.dart';
 import 'settings_state.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -15,20 +16,85 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _mobileController = TextEditingController();
-  String _selectedRole = 'admin';
+
+  bool _showCreateUserForm = false;
+  bool _showCreateRoleForm = false;
+  bool _obscurePassword = true;
+
+  final _createRoleFormKey = GlobalKey<FormState>();
+  final _roleNameInputController = TextEditingController();
+  List<dynamic> _activePermissionsList = [];
+  final Set<int> _selectedPermissionIds = {};
+  bool _isLoadingPermissions = false;
+  String _roleStatus = 'Active';
+
+  bool _showCreatePermissionForm = false;
+  final _createPermissionFormKey = GlobalKey<FormState>();
+  final _permissionNameInputController = TextEditingController();
+  String _permissionStatus = 'Active';
+
+  bool _showAddCameraForm = false;
+  final _createCameraFormKey = GlobalKey<FormState>();
+  final _camIDInputController = TextEditingController();
+  final _camLocationInputController = TextEditingController();
+  final _rtaOfficeCodeInputController = TextEditingController();
+  final _channelNameInputController = TextEditingController();
+  String? _selectedCamDistrict;
+  String _camStatus = 'Active';
+
+  bool _showCreateOffenceForm = false;
+  final _createOffenceFormKey = GlobalKey<FormState>();
+  final _offenceNameInputController = TextEditingController();
+  final _challanAmountInputController = TextEditingController();
+  final _duplicateDaysInputController = TextEditingController(text: '1');
+  final _gracePeriodDaysInputController = TextEditingController(text: '0');
+  bool _offenceIsActive = true;
+
+  final Set<String> _selectedRoles = {};
+  final Set<String> _selectedPermissions = {};
+  final Set<String> _selectedDistricts = {};
+  bool _selectAllDistricts = false;
+
+  final List<Offset?> _signaturePoints = [];
 
   @override
   void dispose() {
     _usernameController.dispose();
+    _passwordController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
     _mobileController.dispose();
+    _roleNameInputController.dispose();
+    _permissionNameInputController.dispose();
+    _camIDInputController.dispose();
+    _camLocationInputController.dispose();
+    _rtaOfficeCodeInputController.dispose();
+    _channelNameInputController.dispose();
+    _offenceNameInputController.dispose();
+    _challanAmountInputController.dispose();
+    _duplicateDaysInputController.dispose();
+    _gracePeriodDaysInputController.dispose();
     super.dispose();
+  }
+
+  void _resetCreateUserForm() {
+    _usernameController.clear();
+    _passwordController.clear();
+    _firstNameController.clear();
+    _lastNameController.clear();
+    _emailController.clear();
+    _mobileController.clear();
+    _selectedRoles.clear();
+    _selectedPermissions.clear();
+    _selectedDistricts.clear();
+    _selectAllDistricts = false;
+    _signaturePoints.clear();
   }
 
   String _formatCreatedDate(String? dateStr) {
@@ -41,123 +107,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  void _showCreateUserDialog() {
-    _usernameController.clear();
-    _firstNameController.clear();
-    _lastNameController.clear();
-    _emailController.clear();
-    _mobileController.clear();
-    setState(() => _selectedRole = 'admin');
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text(
-                'Create New User',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)),
-              ),
-              content: SizedBox(
-                width: 500,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildInputField('Username *', _usernameController, true),
-                        _buildInputField('First Name *', _firstNameController, true),
-                        _buildInputField('Last Name', _lastNameController, false),
-                        _buildInputField('Email *', _emailController, true, keyboardType: TextInputType.emailAddress),
-                        _buildInputField('Mobile Number *', _mobileController, true, keyboardType: TextInputType.phone),
-                                                const Text(
-                          'Role *',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedRole,
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                            DropdownMenuItem(value: 'operator', child: Text('Operator')),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setDialogState(() => _selectedRole = val);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (_formKey.currentState?.validate() ?? false) {
-                      final navigator = Navigator.of(context);
-                      final messenger = ScaffoldMessenger.of(context);
-                      final success = await ref.read(settingsNotifierProvider.notifier).createNewUser(
-                            username: _usernameController.text.trim(),
-                            firstName: _firstNameController.text.trim(),
-                            lastName: _lastNameController.text.trim(),
-                            email: _emailController.text.trim(),
-                            mobileNumber: _mobileController.text.trim(),
-                            role: _selectedRole,
-                          );
-                      if (success && mounted) {
-                        navigator.pop();
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('User created successfully.')),
-                        );
-                      }
-                    }
-                  },
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
-                  child: const Text('Create'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildInputField(String label, TextEditingController controller, bool required, {TextInputType keyboardType = TextInputType.text}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54)),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: controller,
-            keyboardType: keyboardType,
-            validator: required
-                ? (val) => (val == null || val.trim().isEmpty) ? 'This field is required' : null
-                : null,
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showViewUserDialog(Map<String, dynamic> user) {
     showDialog(
@@ -285,10 +234,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildMobileTabItem(int index, IconData icon, String label, int activeIndex, SettingsNotifier notifier) {
+    final isActive = index == activeIndex;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      child: InkWell(
+        onTap: () => notifier.changeModule(index),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFFE8F4F3) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive ? const Color(0xFF64D2C3) : Colors.grey.shade300,
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive ? const Color(0xFF0F5D55) : const Color(0xFF4A5568),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? const Color(0xFF0F5D55) : const Color(0xFF4A5568),
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(settingsNotifierProvider);
     final notifier = ref.read(settingsNotifierProvider.notifier);
+    final isMobile = MediaQuery.of(context).size.width < 900;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F6F6),
@@ -300,97 +291,98 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Top Title Header Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Settings',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F3260),
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Government Administration Console',
-                        style: TextStyle(fontSize: 13, color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      const Text(
-                        'Logged in as: ',
-                        style: TextStyle(fontSize: 13, color: Colors.black54),
-                      ),
-                      const Text(
-                        'admin',
-                        style: TextStyle(fontSize: 13, color: Color(0xFF0F5D55), fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ],
+              const PageHeaderBanner(
+                title: 'System Settings',
+                subtitle: 'Government Administration Console',
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-              // Left Sidebar + Main settings window row
+              // Left Sidebar + Main settings window layout (Row on desktop, Column on mobile)
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Left Menu Card
-                    SizedBox(
-                      width: 280,
-                      child: Card(
-                        elevation: 1,
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Settings Modules',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                  letterSpacing: 0.8,
+                child: isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                _buildMobileTabItem(0, Icons.people_alt_outlined, 'User Management', state.activeModule, notifier),
+                                _buildMobileTabItem(1, Icons.assignment_ind_outlined, 'Role Management', state.activeModule, notifier),
+                                _buildMobileTabItem(2, Icons.verified_user_outlined, 'Permission Management', state.activeModule, notifier),
+                                _buildMobileTabItem(3, Icons.videocam_outlined, 'Camera Management', state.activeModule, notifier),
+                                _buildMobileTabItem(4, Icons.gavel_outlined, 'Offence Management', state.activeModule, notifier),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: Card(
+                              elevation: 1,
+                              color: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              clipBehavior: Clip.antiAlias,
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(16),
+                                child: _buildMainContent(state),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Left Menu Card
+                          SizedBox(
+                            width: 280,
+                            child: Card(
+                              elevation: 1,
+                              color: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Settings Modules',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    _buildLeftMenuItem(0, Icons.people_alt_outlined, 'User Management', state.activeModule, notifier),
+                                    _buildLeftMenuItem(1, Icons.assignment_ind_outlined, 'Role Management', state.activeModule, notifier),
+                                    _buildLeftMenuItem(2, Icons.verified_user_outlined, 'Permission Management', state.activeModule, notifier),
+                                    _buildLeftMenuItem(3, Icons.videocam_outlined, 'Camera Management', state.activeModule, notifier),
+                                    _buildLeftMenuItem(4, Icons.gavel_outlined, 'Offence Management', state.activeModule, notifier),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              _buildLeftMenuItem(0, Icons.people_alt_outlined, 'User Management', state.activeModule, notifier),
-                              _buildLeftMenuItem(1, Icons.assignment_ind_outlined, 'Role Management', state.activeModule, notifier),
-                              _buildLeftMenuItem(2, Icons.verified_user_outlined, 'Permission Management', state.activeModule, notifier),
-                              _buildLeftMenuItem(3, Icons.videocam_outlined, 'Camera Management', state.activeModule, notifier),
-                              _buildLeftMenuItem(4, Icons.gavel_outlined, 'Offence Management', state.activeModule, notifier),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 20),
+                          const SizedBox(width: 20),
 
-                    // Right Main Panel
-                    Expanded(
-                      child: Card(
-                        elevation: 1,
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        clipBehavior: Clip.antiAlias,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(24),
-                          child: _buildMainContent(state),
-                        ),
+                          // Right Main Panel
+                          Expanded(
+                            child: Card(
+                              elevation: 1,
+                              color: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              clipBehavior: Clip.antiAlias,
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(24),
+                                child: _buildMainContent(state),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -422,43 +414,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // User Management Header Row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'User Management',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F3260),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Create and manage system users',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-              ],
-            ),
-            FilledButton.icon(
-              onPressed: _showCreateUserDialog,
-              icon: const Icon(Icons.person_add_outlined, size: 16),
-              label: const Text('Create New User', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D9488),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
+        _buildModuleHeader(
+          title: 'User Management',
+          subtitle: 'Create and manage system users',
+          icon: _showCreateUserForm ? Icons.close : Icons.person_add_outlined,
+          buttonLabel: _showCreateUserForm ? 'Cancel' : 'Create New User',
+          onPressed: () {
+            setState(() {
+              _resetCreateUserForm();
+              _showCreateUserForm = !_showCreateUserForm;
+            });
+          },
         ),
         const SizedBox(height: 20),
 
-        // Info Alert Banner
+        if (_showCreateUserForm)
+          _buildCreateUserInlineForm(state)
+        else ...[
+          // Info Alert Banner
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -525,156 +498,1034 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 16),
 
         // Table
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(3),
-            1: FlexColumnWidth(4),
-            2: FlexColumnWidth(2),
-            3: FlexColumnWidth(2),
-            4: FlexColumnWidth(3),
-            5: FlexColumnWidth(3),
-          },
-          border: TableBorder(
-            horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-          ),
-          children: [
-            TableRow(
-              decoration: const BoxDecoration(
-                color: Color(0xFFFAFAFA),
-              ),
-              children: const [
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Email', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Role', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-              ],
-            ),
-            ...state.users.map((userObj) {
-              final Map<String, dynamic> user = userObj is Map ? Map<String, dynamic>.from(userObj) : {};
-              final userId = int.tryParse(user['id']?.toString() ?? '') ?? 0;
-              final name = (user['firstName']?.toString().isEmpty ?? true) && (user['lastName']?.toString().isEmpty ?? true)
-                  ? '-'
-                  : '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim();
-              final email = user['email']?.toString().isEmpty ?? true ? '-' : user['email'].toString();
-
-              return TableRow(
-                children: [
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(email, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(user['role']?.toString() ?? 'N/A', style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFDCFCE7),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('Active', style: TextStyle(color: Color(0xFF166534), fontSize: 11, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double minWidth = 800;
+            final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(3),
+                    1: FlexColumnWidth(4),
+                    2: FlexColumnWidth(2),
+                    3: FlexColumnWidth(2),
+                    4: FlexColumnWidth(3),
+                    5: FlexColumnWidth(3),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
                   ),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(_formatCreatedDate(user['createdAt']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            OutlinedButton(
-                              onPressed: () => _showViewUserDialog(user),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Colors.grey.shade300),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                minimumSize: Size.zero,
-                              ),
-                              child: const Text('View', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Edit user functionality under construction.')),
-                                );
-                              },
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Colors.grey.shade300),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                minimumSize: Size.zero,
-                              ),
-                              child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        FilledButton(
-                          onPressed: () => _confirmDeleteUser(userId),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFB91C1C),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            minimumSize: const Size(88, 24),
-                          ),
-                          child: const Text('Delete', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ),
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFAFAFA),
+                      ),
+                      children: const [
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Email', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Role', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
                       ],
                     ),
+                    ...state.users.map((userObj) {
+                      final Map<String, dynamic> user = userObj is Map ? Map<String, dynamic>.from(userObj) : {};
+                      final userId = int.tryParse(user['id']?.toString() ?? '') ?? 0;
+                      final name = (user['firstName']?.toString().isEmpty ?? true) && (user['lastName']?.toString().isEmpty ?? true)
+                          ? '-'
+                          : '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim();
+                      final email = user['email']?.toString().isEmpty ?? true ? '-' : user['email'].toString();
+
+                      return TableRow(
+                        children: [
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(email, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(user['role']?.toString() ?? 'N/A', style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text('Active', style: TextStyle(color: Color(0xFF166534), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(_formatCreatedDate(user['createdAt']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    OutlinedButton(
+                                      onPressed: () => _showViewUserDialog(user),
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(color: Colors.grey.shade300),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                        minimumSize: Size.zero,
+                                      ),
+                                      child: const Text('View', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton(
+                                      onPressed: () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Edit user functionality under construction.')),
+                                        );
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(color: Colors.grey.shade300),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                        minimumSize: Size.zero,
+                                      ),
+                                      child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                FilledButton(
+                                  onPressed: () => _confirmDeleteUser(userId),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFFB91C1C),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                    minimumSize: const Size(88, 24),
+                                  ),
+                                  child: const Text('Delete', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCreateUserInlineForm(SettingsState state) {
+    final availableRoles = state.roles.map((r) {
+      if (r is Map) return r['roleName']?.toString() ?? '';
+      return r.toString();
+    }).where((name) => name.isNotEmpty).toList();
+
+    if (availableRoles.isEmpty) {
+      availableRoles.addAll(['Admin', 'Viewer', 'Tester', 'Inspector', 'Sub Inspector', 'officer']);
+    }
+
+    final availablePermissions = [
+      'LIVE_FEED',
+      'SETTINGS',
+      'CHALLAN',
+      'HISTORY',
+      'SUPPORT_CENTER',
+      'DETAILES_NOT_FOUND',
+      'VEHICLE_HISTORY',
+      'DASHBOARD',
+      'BUDGET_PAGE',
+      'VEHICLE_EXPORT',
+    ];
+
+    final availableDistricts = state.districts.map((d) {
+      if (d is Map) return d['districtName']?.toString() ?? '';
+      return d.toString();
+    }).where((name) => name.isNotEmpty).toList();
+
+    if (availableDistricts.isEmpty) {
+      availableDistricts.addAll([
+        'Nizamabad', 'Adilabad', 'Sangareddy', 'Kamareddy', 'Nirmal',
+        'Komaram Bheem Asifabad', 'Jogulamba Gadwal', 'Narayanpet', 'Nalgonda',
+        'Suryapet', 'Khammam', 'Bhadradri Kothagudem', 'Jayashankar Bhupalpally',
+        'Mulugu', 'Peddapalli', 'Karimnagar', 'Mancherial', 'Vikarabad',
+        'Rangareddy', 'Medchal Malkajgiri'
+      ]);
+    }
+
+    final isMobile = MediaQuery.of(context).size.width < 800;
+
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'New User Information',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0D9488),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Inputs Grid
+          if (isMobile) ...[
+            _buildFormTextField(
+              label: 'Username',
+              hintText: 'Enter username (max 50 chars)',
+              controller: _usernameController,
+              isRequired: true,
+            ),
+            const SizedBox(height: 16),
+            _buildFormTextField(
+              label: 'Mobile Number',
+              hintText: 'Enter mobile (10-15 digits)',
+              controller: _mobileController,
+              isRequired: true,
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 16),
+            _buildFormTextField(
+              label: 'Password',
+              hintText: 'Minimum 6 characters',
+              controller: _passwordController,
+              isRequired: true,
+              isPassword: true,
+            ),
+            const SizedBox(height: 16),
+            _buildFormTextField(
+              label: 'Email',
+              hintText: 'Enter email (optional)',
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 16),
+            _buildFormTextField(
+              label: 'First Name',
+              hintText: 'Enter first name (optional)',
+              controller: _firstNameController,
+            ),
+            const SizedBox(height: 16),
+            _buildFormTextField(
+              label: 'Last Name',
+              hintText: 'Enter last name (optional)',
+              controller: _lastNameController,
+            ),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildFormTextField(
+                    label: 'Username',
+                    hintText: 'Enter username (max 50 chars)',
+                    controller: _usernameController,
+                    isRequired: true,
                   ),
-                ],
-              );
-            }),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: _buildFormTextField(
+                    label: 'Mobile Number',
+                    hintText: 'Enter mobile (10-15 digits)',
+                    controller: _mobileController,
+                    isRequired: true,
+                    keyboardType: TextInputType.phone,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildFormTextField(
+                    label: 'Password',
+                    hintText: 'Minimum 6 characters',
+                    controller: _passwordController,
+                    isRequired: true,
+                    isPassword: true,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: _buildFormTextField(
+                    label: 'Email',
+                    hintText: 'Enter email (optional)',
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildFormTextField(
+                    label: 'First Name',
+                    hintText: 'Enter first name (optional)',
+                    controller: _firstNameController,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: _buildFormTextField(
+                    label: 'Last Name',
+                    hintText: 'Enter last name (optional)',
+                    controller: _lastNameController,
+                  ),
+                ),
+              ],
+            ),
           ],
+          const SizedBox(height: 24),
+
+          // Roles, Permissions & Districts Sections
+          if (isMobile) ...[
+            // Roles Box
+            const Text('Roles', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            const SizedBox(height: 8),
+            Container(
+              height: 160,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                children: availableRoles.map((roleName) {
+                  final isChecked = _selectedRoles.contains(roleName);
+                  return CheckboxListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    title: Text(roleName, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B))),
+                    value: isChecked,
+                    activeColor: const Color(0xFF0D9488),
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedRoles.add(roleName);
+                        } else {
+                          _selectedRoles.remove(roleName);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Permissions Box
+            const Text('Permissions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
+            const SizedBox(height: 4),
+            Text('Selecting a role automatically selects its permissions. You may check or uncheck permissions to create user-specific overrides.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            const SizedBox(height: 12),
+            Column(
+              children: availablePermissions.map((perm) {
+                final isChecked = _selectedPermissions.contains(perm);
+                return CheckboxListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: Text(perm, style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                  value: isChecked,
+                  activeColor: const Color(0xFF0D9488),
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedPermissions.add(perm);
+                      } else {
+                        _selectedPermissions.remove(perm);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+
+            // Districts Box
+            const Text('Districts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            const SizedBox(height: 8),
+            Container(
+              height: 300,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                children: [
+                  CheckboxListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    title: const Text('Select All Districts', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
+                    value: _selectAllDistricts,
+                    activeColor: const Color(0xFF0D9488),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectAllDistricts = val == true;
+                        if (_selectAllDistricts) {
+                          _selectedDistricts.addAll(availableDistricts);
+                        } else {
+                          _selectedDistricts.clear();
+                        }
+                      });
+                    },
+                  ),
+                  const Divider(height: 1),
+                  ...availableDistricts.map((dist) {
+                    final isChecked = _selectedDistricts.contains(dist);
+                    return CheckboxListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      title: Text(dist, style: const TextStyle(fontSize: 13, color: Color(0xFF334155))),
+                      value: isChecked,
+                      activeColor: const Color(0xFF0D9488),
+                      onChanged: (val) {
+                        setState(() {
+                          if (val == true) {
+                            _selectedDistricts.add(dist);
+                          } else {
+                            _selectedDistricts.remove(dist);
+                          }
+                          _selectAllDistricts = _selectedDistricts.length == availableDistricts.length;
+                        });
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left Column: Roles & Permissions
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Roles', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 160,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          children: availableRoles.map((roleName) {
+                            final isChecked = _selectedRoles.contains(roleName);
+                            return CheckboxListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              title: Text(roleName, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B))),
+                              value: isChecked,
+                              activeColor: const Color(0xFF0D9488),
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedRoles.add(roleName);
+                                  } else {
+                                    _selectedRoles.remove(roleName);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      const Text('Permissions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
+                      const SizedBox(height: 4),
+                      Text('Selecting a role automatically selects its permissions. You may check or uncheck permissions to create user-specific overrides.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                      const SizedBox(height: 12),
+                      Column(
+                        children: availablePermissions.map((perm) {
+                          final isChecked = _selectedPermissions.contains(perm);
+                          return CheckboxListTile(
+                            dense: true,
+                            visualDensity: VisualDensity.compact,
+                            title: Text(perm, style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                            value: isChecked,
+                            activeColor: const Color(0xFF0D9488),
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _selectedPermissions.add(perm);
+                                } else {
+                                  _selectedPermissions.remove(perm);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+
+                // Right Column: Districts
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Districts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 320,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          children: [
+                            CheckboxListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              title: const Text('Select All Districts', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
+                              value: _selectAllDistricts,
+                              activeColor: const Color(0xFF0D9488),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectAllDistricts = val == true;
+                                  if (_selectAllDistricts) {
+                                    _selectedDistricts.addAll(availableDistricts);
+                                  } else {
+                                    _selectedDistricts.clear();
+                                  }
+                                });
+                              },
+                            ),
+                            const Divider(height: 1),
+                            ...availableDistricts.map((dist) {
+                              final isChecked = _selectedDistricts.contains(dist);
+                              return CheckboxListTile(
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                title: Text(dist, style: const TextStyle(fontSize: 13, color: Color(0xFF334155))),
+                                value: isChecked,
+                                activeColor: const Color(0xFF0D9488),
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedDistricts.add(dist);
+                                    } else {
+                                      _selectedDistricts.remove(dist);
+                                    }
+                                    _selectAllDistricts = _selectedDistricts.length == availableDistricts.length;
+                                  });
+                                },
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 24),
+
+          // Signature Section
+          const Text('Signature', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+          const SizedBox(height: 8),
+          Container(
+            height: 180,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Listener(
+              onPointerDown: (event) {
+                final RenderBox renderBox = context.findRenderObject() as RenderBox;
+                final localPosition = renderBox.globalToLocal(event.position);
+                setState(() {
+                  _signaturePoints.add(localPosition);
+                });
+              },
+              onPointerMove: (event) {
+                final RenderBox renderBox = context.findRenderObject() as RenderBox;
+                final localPosition = renderBox.globalToLocal(event.position);
+                setState(() {
+                  _signaturePoints.add(localPosition);
+                });
+              },
+              onPointerUp: (event) {
+                setState(() {
+                  _signaturePoints.add(null);
+                });
+              },
+              child: CustomPaint(
+                painter: _SignaturePainter(_signaturePoints),
+                child: Stack(
+                  children: [
+                    if (_signaturePoints.isEmpty)
+                      const Center(
+                        child: Text(
+                          'Draw signature here',
+                          style: TextStyle(color: Colors.black26, fontSize: 13),
+                        ),
+                      ),
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: OutlinedButton(
+                        onPressed: () => setState(() => _signaturePoints.clear()),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          side: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        child: const Text('Clear Signature', style: TextStyle(color: Color(0xFF334155), fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Form Action Buttons
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: _submitInlineCreateUser,
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: const Text('Create User', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF64D2C3),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: () => setState(() {
+                  _resetCreateUserForm();
+                  _showCreateUserForm = false;
+                }),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF94A3B8),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormTextField({
+    required String label,
+    required String hintText,
+    required TextEditingController controller,
+    bool isRequired = false,
+    bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+            if (isRequired)
+              const Text(
+                ' *',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          obscureText: isPassword && _obscurePassword,
+          keyboardType: keyboardType,
+          style: const TextStyle(fontSize: 13),
+          validator: isRequired
+              ? (val) => (val == null || val.trim().isEmpty) ? '$label is required' : null
+              : null,
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            suffixIcon: isPassword
+                ? IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      size: 18,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  )
+                : null,
+          ),
         ),
       ],
     );
+  }
+
+  Future<void> _submitInlineCreateUser() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final roleStr = _selectedRoles.isNotEmpty ? _selectedRoles.join(', ') : 'User';
+
+    final success = await ref.read(settingsNotifierProvider.notifier).createNewUser(
+          username: _usernameController.text.trim(),
+          firstName: _firstNameController.text.trim(),
+          lastName: _lastNameController.text.trim(),
+          email: _emailController.text.trim(),
+          mobileNumber: _mobileController.text.trim(),
+          role: roleStr,
+        );
+
+    if (success && mounted) {
+      setState(() {
+        _showCreateUserForm = false;
+        _usernameController.clear();
+        _passwordController.clear();
+        _firstNameController.clear();
+        _lastNameController.clear();
+        _emailController.clear();
+        _mobileController.clear();
+        _signaturePoints.clear();
+      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('User created successfully.')),
+      );
+    }
+  }
+
+  Future<void> _toggleCreateRoleForm() async {
+    setState(() {
+      _showCreateRoleForm = !_showCreateRoleForm;
+      if (_showCreateRoleForm) {
+        _roleNameInputController.clear();
+        _selectedPermissionIds.clear();
+        _roleStatus = 'Active';
+      }
+    });
+
+    if (_showCreateRoleForm && _activePermissionsList.isEmpty) {
+      setState(() => _isLoadingPermissions = true);
+      final perms = await ref.read(settingsNotifierProvider.notifier).fetchActivePermissions();
+      if (mounted) {
+        setState(() {
+          _activePermissionsList = perms;
+          _isLoadingPermissions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _submitNewRole() async {
+    if (!(_createRoleFormKey.currentState?.validate() ?? false)) return;
+    final roleName = _roleNameInputController.text.trim();
+    if (roleName.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await ref.read(settingsNotifierProvider.notifier).createRole(
+      roleName,
+      _selectedPermissionIds.toList(),
+      _roleStatus == 'Active',
+    );
+
+    if (success && mounted) {
+      setState(() {
+        _showCreateRoleForm = false;
+        _roleNameInputController.clear();
+        _selectedPermissionIds.clear();
+      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Role created successfully.')),
+      );
+    }
   }
 
   Widget _buildRoleManagement(SettingsState state) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Role Management',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F3260),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Create and manage system roles',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+        _buildModuleHeader(
+          title: 'Role Management',
+          subtitle: 'Create and manage system roles',
+          icon: Icons.badge_outlined,
+          buttonLabel: _showCreateRoleForm ? 'Cancel' : 'Create Role',
+          onPressed: _toggleCreateRoleForm,
+        ),
+        const SizedBox(height: 24),
+
+        if (_showCreateRoleForm) ...[
+          // New Role Card matching Image 2
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2ECEC), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            FilledButton.icon(
-              onPressed: _showCreateRoleDialog,
-              icon: const Icon(Icons.badge_outlined, size: 16),
-              label: const Text('Create Role', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D9488),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Form(
+              key: _createRoleFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'New Role',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF00A49F),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      final roleNameField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: const TextSpan(
+                              text: 'Role Name ',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                              children: [
+                                TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _roleNameInputController,
+                            validator: (val) => (val == null || val.trim().isEmpty) ? 'Role name is required' : null,
+                            decoration: InputDecoration(
+                              hintText: 'Enter role name',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final statusField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Status',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            initialValue: _roleStatus,
+                            items: const [
+                              DropdownMenuItem(value: 'Active', child: Text('Active')),
+                              DropdownMenuItem(value: 'Inactive', child: Text('Inactive')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _roleStatus = val);
+                              }
+                            },
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      if (isMobile) {
+                        return Column(
+                          children: [
+                            roleNameField,
+                            const SizedBox(height: 16),
+                            statusField,
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: roleNameField),
+                          const SizedBox(width: 20),
+                          Expanded(child: statusField),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Permissions',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 220,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey.shade300, width: 1.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _isLoadingPermissions
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: _activePermissionsList.length,
+                            separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                            itemBuilder: (context, index) {
+                              final item = _activePermissionsList[index];
+                              final Map<String, dynamic> perm = item is Map ? Map<String, dynamic>.from(item) : {};
+                              final id = int.tryParse(perm['id']?.toString() ?? '') ?? 0;
+                              final permName = perm['permissionName']?.toString() ?? '';
+                              final isChecked = _selectedPermissionIds.contains(id);
+
+                              return InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    if (isChecked) {
+                                      _selectedPermissionIds.remove(id);
+                                    } else {
+                                      _selectedPermissionIds.add(id);
+                                    }
+                                  });
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: Checkbox(
+                                          value: isChecked,
+                                          activeColor: const Color(0xFF0D9488),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                          onChanged: (val) {
+                                            setState(() {
+                                              if (val == true) {
+                                                _selectedPermissionIds.add(id);
+                                              } else {
+                                                _selectedPermissionIds.remove(id);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        permName,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFF334155),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      FilledButton(
+                        onPressed: _submitNewRole,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF81C784),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Submit',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _toggleCreateRoleForm,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF90A4AE),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 24),
+        ],
 
         // Section Title: Roles with badge
         Row(
@@ -704,175 +1555,129 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 16),
 
         // Table
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(4),
-            1: FlexColumnWidth(2),
-            2: FlexColumnWidth(3),
-            3: FlexColumnWidth(5),
-          },
-          border: TableBorder(
-            horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-          ),
-          children: [
-            TableRow(
-              decoration: const BoxDecoration(
-                color: Color(0xFFFAFAFA),
-              ),
-              children: const [
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Role Name', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-              ],
-            ),
-            ...state.roles.map((roleObj) {
-              final Map<String, dynamic> r = roleObj is Map ? Map<String, dynamic>.from(roleObj) : {};
-              final roleId = int.tryParse(r['id']?.toString() ?? '') ?? 0;
-              final name = r['roleName']?.toString() ?? '-';
-              final isActive = r['isActive'] == true;
-
-              return TableRow(
-                children: [
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isActive ? 'Active' : 'Deactivated',
-                          style: TextStyle(
-                            color: isActive ? const Color(0xFF166534) : const Color(0xFF991B1B),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double minWidth = 800;
+            final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(4),
+                    1: FlexColumnWidth(2),
+                    2: FlexColumnWidth(3),
+                    3: FlexColumnWidth(5),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
                   ),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(_formatCreatedDate(r['createdAt']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => _showViewRoleDialog(r),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                          ),
-                          child: const Text('View', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Edit role functionality under construction.')),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                          ),
-                          child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () => _confirmToggleRole(roleId, isActive),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: isActive ? const Color(0xFFB91C1C) : const Color(0xFF15803D),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                          ),
-                          child: Text(
-                            isActive ? 'Deactivate' : 'Activate',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ),
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFAFAFA),
+                      ),
+                      children: const [
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Role Name', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
                       ],
                     ),
-                  ),
-                ],
-              );
-            }),
-          ],
+                    ...state.roles.map((roleObj) {
+                      final Map<String, dynamic> r = roleObj is Map ? Map<String, dynamic>.from(roleObj) : {};
+                      final roleId = int.tryParse(r['id']?.toString() ?? '') ?? 0;
+                      final name = r['roleName']?.toString() ?? '-';
+                      final isActive = r['isActive'] == true;
+
+                      return TableRow(
+                        children: [
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  isActive ? 'Active' : 'Deactivated',
+                                  style: TextStyle(
+                                    color: isActive ? const Color(0xFF166534) : const Color(0xFF991B1B),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(_formatCreatedDate(r['createdAt']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () => _showViewRoleDialog(r),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: Size.zero,
+                                  ),
+                                  child: const Text('View', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Edit role functionality under construction.')),
+                                    );
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: Size.zero,
+                                  ),
+                                  child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  onPressed: () => _confirmToggleRole(roleId, isActive),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: isActive ? const Color(0xFFB91C1C) : const Color(0xFF15803D),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: Size.zero,
+                                  ),
+                                  child: Text(
+                                    isActive ? 'Deactivate' : 'Activate',
+                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
   }
 
-  void _showCreateRoleDialog() {
-    final roleController = TextEditingController();
-    final roleFormKey = GlobalKey<FormState>();
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create New Role', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
-          content: SizedBox(
-            width: 400,
-            child: Form(
-              key: roleFormKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Role Name *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54)),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: roleController,
-                    validator: (val) => (val == null || val.trim().isEmpty) ? 'Role name is required' : null,
-                    decoration: InputDecoration(
-                      hintText: 'Enter role name (e.g. Viewer)',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (roleFormKey.currentState?.validate() ?? false) {
-                  final navigator = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  final success = await ref.read(settingsNotifierProvider.notifier).createRole(roleController.text.trim());
-                  if (success && mounted) {
-                    navigator.pop();
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Role created successfully.')),
-                    );
-                  }
-                }
-              },
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   void _showViewRoleDialog(Map<String, dynamic> role) {
     showDialog(
@@ -939,44 +1744,187 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _toggleCreatePermissionForm() {
+    setState(() {
+      _showCreatePermissionForm = !_showCreatePermissionForm;
+      if (_showCreatePermissionForm) {
+        _permissionNameInputController.clear();
+        _permissionStatus = 'Active';
+      }
+    });
+  }
+
+  Future<void> _submitNewPermission() async {
+    if (!(_createPermissionFormKey.currentState?.validate() ?? false)) return;
+    final permName = _permissionNameInputController.text.trim();
+    if (permName.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await ref.read(settingsNotifierProvider.notifier).createPermission(
+      permName,
+      _permissionStatus == 'Active',
+    );
+
+    if (success && mounted) {
+      setState(() {
+        _showCreatePermissionForm = false;
+        _permissionNameInputController.clear();
+        _permissionStatus = 'Active';
+      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Permission created successfully.')),
+      );
+    }
+  }
+
   Widget _buildPermissionManagement(SettingsState state) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Permission Management',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F3260),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Create and manage permissions',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+        _buildModuleHeader(
+          title: 'Permission Management',
+          subtitle: 'Create and manage permissions',
+          icon: Icons.security_outlined,
+          buttonLabel: _showCreatePermissionForm ? 'Cancel' : 'Create Permission',
+          onPressed: _toggleCreatePermissionForm,
+        ),
+        const SizedBox(height: 24),
+
+        if (_showCreatePermissionForm) ...[
+          // New Permission Card matching Image 2
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2ECEC), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            FilledButton.icon(
-              onPressed: _showCreatePermissionDialog,
-              icon: const Icon(Icons.security_outlined, size: 16),
-              label: const Text('Create Permission', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D9488),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Form(
+              key: _createPermissionFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'New Permission',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF00A49F),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      final permNameField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Permission Name',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _permissionNameInputController,
+                            validator: (val) => (val == null || val.trim().isEmpty) ? 'Permission name is required' : null,
+                            decoration: InputDecoration(
+                              hintText: 'Enter permission name',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final statusField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Status',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            initialValue: _permissionStatus,
+                            items: const [
+                              DropdownMenuItem(value: 'Active', child: Text('Active')),
+                              DropdownMenuItem(value: 'Inactive', child: Text('Inactive')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _permissionStatus = val);
+                              }
+                            },
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      if (isMobile) {
+                        return Column(
+                          children: [
+                            permNameField,
+                            const SizedBox(height: 16),
+                            statusField,
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: permNameField),
+                          const SizedBox(width: 20),
+                          Expanded(child: statusField),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      FilledButton(
+                        onPressed: _submitNewPermission,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF81C784),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Save Permission',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _toggleCreatePermissionForm,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF90A4AE),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 24),
+        ],
 
         // Section Title: Permissions with badge
         Row(
@@ -1006,162 +1954,114 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 16),
 
         // Table
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(4),
-            1: FlexColumnWidth(2),
-            2: FlexColumnWidth(3),
-            3: FlexColumnWidth(4),
-          },
-          border: TableBorder(
-            horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-          ),
-          children: [
-            TableRow(
-              decoration: const BoxDecoration(
-                color: Color(0xFFFAFAFA),
-              ),
-              children: const [
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Permission Name', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-              ],
-            ),
-            ...state.permissions.map((permObj) {
-              final Map<String, dynamic> p = permObj is Map ? Map<String, dynamic>.from(permObj) : {};
-              final permId = int.tryParse(p['id']?.toString() ?? '') ?? 0;
-              final name = p['permissionName']?.toString() ?? '-';
-              final isActive = p['isActive'] == true;
-
-              return TableRow(
-                children: [
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isActive ? 'Active' : 'Deactivated',
-                          style: TextStyle(
-                            color: isActive ? const Color(0xFF166534) : const Color(0xFF991B1B),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double minWidth = 800;
+            final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(4),
+                    1: FlexColumnWidth(2),
+                    2: FlexColumnWidth(3),
+                    3: FlexColumnWidth(4),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
                   ),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(_formatCreatedDate(p['createdAt']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Edit permission functionality under construction.')),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                          ),
-                          child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () => _confirmTogglePermission(permId, isActive),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: isActive ? const Color(0xFFB91C1C) : const Color(0xFF15803D),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                          ),
-                          child: Text(
-                            isActive ? 'Deactivate' : 'Activate',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ),
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFAFAFA),
+                      ),
+                      children: const [
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Permission Name', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
                       ],
                     ),
-                  ),
-                ],
-              );
-            }),
-          ],
+                    ...state.permissions.map((permObj) {
+                      final Map<String, dynamic> p = permObj is Map ? Map<String, dynamic>.from(permObj) : {};
+                      final permId = int.tryParse(p['id']?.toString() ?? '') ?? 0;
+                      final name = p['permissionName']?.toString() ?? '-';
+                      final isActive = p['isActive'] == true;
+
+                      return TableRow(
+                        children: [
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  isActive ? 'Active' : 'Deactivated',
+                                  style: TextStyle(
+                                    color: isActive ? const Color(0xFF166534) : const Color(0xFF991B1B),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(_formatCreatedDate(p['createdAt']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Edit permission functionality under construction.')),
+                                    );
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: Size.zero,
+                                  ),
+                                  child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  onPressed: () => _confirmTogglePermission(permId, isActive),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: isActive ? const Color(0xFFB91C1C) : const Color(0xFF15803D),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: Size.zero,
+                                  ),
+                                  child: Text(
+                                    isActive ? 'Deactivate' : 'Activate',
+                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ],
-    );
-  }
-
-  void _showCreatePermissionDialog() {
-    final permController = TextEditingController();
-    final permFormKey = GlobalKey<FormState>();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create New Permission', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
-          content: SizedBox(
-            width: 400,
-            child: Form(
-              key: permFormKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Permission Name *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54)),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: permController,
-                    validator: (val) => (val == null || val.trim().isEmpty) ? 'Permission name is required' : null,
-                    decoration: InputDecoration(
-                      hintText: 'Enter permission name (e.g. dashboard)',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (permFormKey.currentState?.validate() ?? false) {
-                  final navigator = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  final success = await ref.read(settingsNotifierProvider.notifier).createPermission(permController.text.trim());
-                  if (success && mounted) {
-                    navigator.pop();
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Permission created successfully.')),
-                    );
-                  }
-                }
-              },
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -1199,45 +2099,330 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _toggleAddCameraForm() {
+    setState(() {
+      _showAddCameraForm = !_showAddCameraForm;
+      if (_showAddCameraForm) {
+        _camIDInputController.clear();
+        _camLocationInputController.clear();
+        _rtaOfficeCodeInputController.clear();
+        _channelNameInputController.clear();
+        _selectedCamDistrict = null;
+        _camStatus = 'Active';
+      }
+    });
+  }
+
+  Future<void> _submitNewCamera() async {
+    if (!(_createCameraFormKey.currentState?.validate() ?? false)) return;
+    final camID = _camIDInputController.text.trim();
+    if (camID.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await ref.read(settingsNotifierProvider.notifier).addCamera({
+      'cameraID': camID,
+      'cameraLocation': _camLocationInputController.text.trim(),
+      'districtCode': _selectedCamDistrict ?? '',
+      'rtaOfficeCode': _rtaOfficeCodeInputController.text.trim(),
+      'channelName': _channelNameInputController.text.trim().isEmpty ? null : _channelNameInputController.text.trim(),
+      'status': _camStatus == 'Active',
+    });
+
+    if (success && mounted) {
+      setState(() {
+        _showAddCameraForm = false;
+        _camIDInputController.clear();
+        _camLocationInputController.clear();
+        _rtaOfficeCodeInputController.clear();
+        _channelNameInputController.clear();
+        _selectedCamDistrict = null;
+        _camStatus = 'Active';
+      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Camera added successfully.')),
+      );
+    }
+  }
+
   Widget _buildCameraManagement(SettingsState state) {
     final notifier = ref.read(settingsNotifierProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Camera Management',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F3260),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Add, edit, and monitor camera configurations',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+        _buildModuleHeader(
+          title: 'Camera Management',
+          subtitle: 'Add, edit, and monitor camera configurations',
+          icon: Icons.add,
+          buttonLabel: _showAddCameraForm ? 'Cancel' : 'Add / Edit Camera',
+          onPressed: _toggleAddCameraForm,
+        ),
+        const SizedBox(height: 20),
+
+        if (_showAddCameraForm) ...[
+          // New Camera Information Card matching Image 2
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2ECEC), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            FilledButton.icon(
-              onPressed: _showAddCameraDialog,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add / Edit Camera', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D9488),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Form(
+              key: _createCameraFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'New Camera Information',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF00A49F),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+
+                      final camIDField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: const TextSpan(
+                              text: 'Camera ID ',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                              children: [
+                                TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _camIDInputController,
+                            validator: (val) => (val == null || val.trim().isEmpty) ? 'Camera ID is required' : null,
+                            decoration: InputDecoration(
+                              hintText: 'Enter camera ID',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final camLocationField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Camera Location',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _camLocationInputController,
+                            decoration: InputDecoration(
+                              hintText: 'Enter location (optional)',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final districtField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: const TextSpan(
+                              text: 'District ',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                              children: [
+                                TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedCamDistrict,
+                            hint: const Text('Select District', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                            items: state.districts.map((d) {
+                              final name = d['districtName']?.toString() ?? '';
+                              return DropdownMenuItem<String>(value: name, child: Text(name));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedCamDistrict = val),
+                            validator: (val) => (val == null || val.isEmpty) ? 'District is required' : null,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final rtaOfficeCodeField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: const TextSpan(
+                              text: 'RTA Office Code ',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                              children: [
+                                TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _rtaOfficeCodeInputController,
+                            validator: (val) => (val == null || val.trim().isEmpty) ? 'RTA office code is required' : null,
+                            decoration: InputDecoration(
+                              hintText: 'Enter office code',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final channelNameField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Channel Name',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _channelNameInputController,
+                            decoration: InputDecoration(
+                              hintText: 'Enter channel name (optional)',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final statusField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Status',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            initialValue: _camStatus,
+                            items: const [
+                              DropdownMenuItem(value: 'Active', child: Text('Active')),
+                              DropdownMenuItem(value: 'Inactive', child: Text('Inactive')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _camStatus = val);
+                              }
+                            },
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      if (isMobile) {
+                        return Column(
+                          children: [
+                            camIDField,
+                            const SizedBox(height: 16),
+                            camLocationField,
+                            const SizedBox(height: 16),
+                            districtField,
+                            const SizedBox(height: 16),
+                            rtaOfficeCodeField,
+                            const SizedBox(height: 16),
+                            channelNameField,
+                            const SizedBox(height: 16),
+                            statusField,
+                          ],
+                        );
+                      }
+                      return Column(
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: camIDField),
+                              const SizedBox(width: 20),
+                              Expanded(child: camLocationField),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: districtField),
+                              const SizedBox(width: 20),
+                              Expanded(child: rtaOfficeCodeField),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: channelNameField),
+                              const SizedBox(width: 20),
+                              Expanded(child: statusField),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _submitNewCamera,
+                        icon: const Icon(Icons.check_circle_outline, size: 18, color: Colors.white),
+                        label: const Text(
+                          'Add Camera',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF81C784),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _toggleAddCameraForm,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF90A4AE),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 20),
+          ),
+          const SizedBox(height: 24),
+        ],
 
         // District filter card
         Card(
@@ -1251,31 +2436,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 const Text('District', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54)),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: state.selectedDistrict.isEmpty ? null : state.selectedDistrict,
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                          fillColor: Colors.white,
-                          filled: true,
-                        ),
-                        items: state.districts.map((d) {
-                          final name = d['districtName']?.toString() ?? '';
-                          return DropdownMenuItem<String>(value: name, child: Text(name));
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            notifier.changeDistrict(val);
-                          }
-                        },
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isMobile = MediaQuery.of(context).size.width < 600;
+                    
+                    final dropdown = DropdownButtonFormField<String>(
+                      initialValue: state.selectedDistrict.isEmpty ? null : state.selectedDistrict,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        fillColor: Colors.white,
+                        filled: true,
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    OutlinedButton.icon(
+                      items: state.districts.map((d) {
+                        final name = d['districtName']?.toString() ?? '';
+                        return DropdownMenuItem<String>(value: name, child: Text(name));
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          notifier.changeDistrict(val);
+                        }
+                      },
+                    );
+
+                    final loadBtn = OutlinedButton.icon(
                       onPressed: () {
                         notifier.loadCameras();
                       },
@@ -1286,8 +2471,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
-                  ],
+                    );
+
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          dropdown,
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 48,
+                            child: loadBtn,
+                          ),
+                        ],
+                      );
+                    } else {
+                      return Row(
+                        children: [
+                          Expanded(child: dropdown),
+                          const SizedBox(width: 16),
+                          loadBtn,
+                        ],
+                      );
+                    }
+                  },
                 ),
               ],
             ),
@@ -1323,222 +2530,160 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 16),
 
         // Table
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(2),
-            1: FlexColumnWidth(2),
-            2: FlexColumnWidth(2),
-            3: FlexColumnWidth(3),
-            4: FlexColumnWidth(2),
-            5: FlexColumnWidth(2),
-            6: FlexColumnWidth(2),
-          },
-          border: TableBorder(
-            horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-          ),
-          children: [
-            TableRow(
-              decoration: const BoxDecoration(
-                color: Color(0xFFFAFAFA),
-              ),
-              children: const [
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Camera ID', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Office', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('District Code', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Location', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Channel', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-              ],
-            ),
-            ...state.cameras.map((camObj) {
-              final Map<String, dynamic> c = camObj is Map ? Map<String, dynamic>.from(camObj) : {};
-              final cameraID = c['cameraID']?.toString() ?? '-';
-              final location = c['cameraLocation']?.toString() ?? '-';
-              final districtCode = c['districtCode']?.toString() ?? '-';
-              final rtaOfficeCode = c['rtaOfficeCode']?.toString() ?? '-';
-              final channel = c['channelName']?.toString() ?? '-';
-              final status = c['status'] != false;
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double minWidth = 900;
+            final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(2),
+                    1: FlexColumnWidth(2),
+                    2: FlexColumnWidth(2),
+                    3: FlexColumnWidth(3),
+                    4: FlexColumnWidth(2),
+                    5: FlexColumnWidth(2),
+                    6: FlexColumnWidth(2),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+                  ),
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFAFAFA),
+                      ),
+                      children: const [
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Camera ID', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Office', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('District Code', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Location', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Channel', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                      ],
+                    ),
+                    ...state.cameras.map((camObj) {
+                      final Map<String, dynamic> c = camObj is Map ? Map<String, dynamic>.from(camObj) : {};
+                      final cameraID = c['cameraID']?.toString() ?? '-';
+                      final location = c['cameraLocation']?.toString() ?? '-';
+                      final districtCode = c['districtCode']?.toString() ?? '-';
+                      final rtaOfficeCode = c['rtaOfficeCode']?.toString() ?? '-';
+                      final channel = c['channelName']?.toString() ?? '-';
+                      final status = c['status'] != false;
 
-              return TableRow(
-                children: [
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(cameraID, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(rtaOfficeCode, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(districtCode, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(location, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(channel, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: status ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          status ? 'Active' : 'Inactive',
-                          style: TextStyle(
-                            color: status ? const Color(0xFF137333) : const Color(0xFFC5221F),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                      return TableRow(
+                        children: [
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(cameraID, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(rtaOfficeCode, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(districtCode, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(location, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(channel, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: status ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  status ? 'Active' : 'Inactive',
+                                  style: TextStyle(
+                                    color: status ? const Color(0xFF137333) : const Color(0xFFC5221F),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Actions for $cameraID triggered.')),
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.grey.shade300),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: Size.zero,
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Actions', style: TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w600)),
-                            SizedBox(width: 4),
-                            Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.black87),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ],
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Actions for $cameraID triggered.')),
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Colors.grey.shade300),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  minimumSize: Size.zero,
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('Actions', style: TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w600)),
+                                    SizedBox(width: 4),
+                                    Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.black87),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
   }
 
-  void _showAddCameraDialog() {
-    final camIDController = TextEditingController();
-    final locationController = TextEditingController();
-    final channelController = TextEditingController();
-    final camFormKey = GlobalKey<FormState>();
+  void _toggleCreateOffenceForm() {
+    setState(() {
+      _showCreateOffenceForm = !_showCreateOffenceForm;
+      if (_showCreateOffenceForm) {
+        _offenceNameInputController.clear();
+        _challanAmountInputController.clear();
+        _duplicateDaysInputController.text = '1';
+        _gracePeriodDaysInputController.text = '0';
+        _offenceIsActive = true;
+      }
+    });
+  }
 
-    final state = ref.read(settingsNotifierProvider);
-    String? selectedDistCode;
-    String? selectedOfficeCode;
+  Future<void> _submitNewOffence() async {
+    if (!(_createOffenceFormKey.currentState?.validate() ?? false)) return;
+    final name = _offenceNameInputController.text.trim();
+    if (name.isEmpty) return;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Add New Camera', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
-              content: SizedBox(
-                width: 450,
-                child: Form(
-                  key: camFormKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildInputField('Camera ID *', camIDController, true),
-                        _buildInputField('Location *', locationController, true),
-                        
-                        const Text('District *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54)),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          items: state.districts.map((d) {
-                            final code = d['districtCode']?.toString() ?? '';
-                            final name = d['districtName']?.toString() ?? '';
-                            return DropdownMenuItem<String>(value: code, child: Text('$name ($code)'));
-                          }).toList(),
-                          onChanged: (val) {
-                            setDialogState(() {
-                              selectedDistCode = val;
-                              selectedOfficeCode = null; // Reset office on district change
-                            });
-                          },
-                          validator: (val) => val == null ? 'District is required' : null,
-                        ),
-                        const SizedBox(height: 12),
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await ref.read(settingsNotifierProvider.notifier).createOffence({
+      'offence': name,
+      'challanAmount': double.tryParse(_challanAmountInputController.text.trim()) ?? 0.0,
+      'duplicateDays': int.tryParse(_duplicateDaysInputController.text.trim()) ?? 1,
+      'gracePeriodDays': int.tryParse(_gracePeriodDaysInputController.text.trim()) ?? 0,
+      'isActive': _offenceIsActive,
+    });
 
-                        const Text('RTA Office *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54)),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedOfficeCode,
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          // Filter offices by chosen district code
-                          items: state.offices.where((o) => o['districtCode'] == selectedDistCode).map((o) {
-                            final code = o['officeCode']?.toString() ?? '';
-                            final name = o['officeName']?.toString() ?? '';
-                            return DropdownMenuItem<String>(value: code, child: Text('$name ($code)'));
-                          }).toList(),
-                          onChanged: (val) {
-                            setDialogState(() {
-                              selectedOfficeCode = val;
-                            });
-                          },
-                          validator: (val) => val == null ? 'RTA office is required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        
-                        _buildInputField('Channel Name (optional)', channelController, false),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (camFormKey.currentState?.validate() ?? false) {
-                      final navigator = Navigator.of(context);
-                      final messenger = ScaffoldMessenger.of(context);
-                      final success = await ref.read(settingsNotifierProvider.notifier).addCamera({
-                        'cameraID': camIDController.text.trim(),
-                        'cameraLocation': locationController.text.trim(),
-                        'districtCode': selectedDistCode,
-                        'rtaOfficeCode': selectedOfficeCode,
-                        'channelName': channelController.text.trim().isEmpty ? null : channelController.text.trim(),
-                      });
-                      if (success && mounted) {
-                        navigator.pop();
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Camera registered successfully.')),
-                        );
-                      }
-                    }
-                  },
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+    if (success && mounted) {
+      setState(() {
+        _showCreateOffenceForm = false;
+        _offenceNameInputController.clear();
+        _challanAmountInputController.clear();
+        _duplicateDaysInputController.text = '1';
+        _gracePeriodDaysInputController.text = '0';
+        _offenceIsActive = true;
+      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Offence rule created successfully.')),
+      );
+    }
   }
 
   Widget _buildOffenceManagement(SettingsState state) {
@@ -1546,40 +2691,227 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header Row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Offence Management',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F3260),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Create and maintain offence rules used for challan generation',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+        _buildModuleHeader(
+          title: 'Offence Management',
+          subtitle: 'Create and maintain offence rules used for challan generation',
+          icon: Icons.add,
+          buttonLabel: _showCreateOffenceForm ? 'Cancel' : 'Create New Offence',
+          onPressed: _toggleCreateOffenceForm,
+        ),
+        const SizedBox(height: 20),
+
+        if (_showCreateOffenceForm) ...[
+          // Offence Rule Details Card matching Image 2
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2ECEC), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            FilledButton.icon(
-              onPressed: _showCreateOffenceDialog,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Create New Offence', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D9488),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Form(
+              key: _createOffenceFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Offence Rule Details',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF00A49F),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+
+                      final offenceNameField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: const TextSpan(
+                              text: 'Offence Name ',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                              children: [
+                                TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _offenceNameInputController,
+                            validator: (val) => (val == null || val.trim().isEmpty) ? 'Offence name is required' : null,
+                            decoration: InputDecoration(
+                              hintText: 'Enter offence name',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final challanAmountField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Challan Amount',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _challanAmountInputController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: 'Enter amount',
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final duplicateDaysField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Duplicate Days',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _duplicateDaysInputController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      final gracePeriodDaysField = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Grace Period Days',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _gracePeriodDaysInputController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+
+                      if (isMobile) {
+                        return Column(
+                          children: [
+                            offenceNameField,
+                            const SizedBox(height: 16),
+                            challanAmountField,
+                            const SizedBox(height: 16),
+                            duplicateDaysField,
+                            const SizedBox(height: 16),
+                            gracePeriodDaysField,
+                          ],
+                        );
+                      }
+                      return Column(
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: offenceNameField),
+                              const SizedBox(width: 20),
+                              Expanded(child: challanAmountField),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: duplicateDaysField),
+                              const SizedBox(width: 20),
+                              Expanded(child: gracePeriodDaysField),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Checkbox(
+                          value: _offenceIsActive,
+                          activeColor: const Color(0xFF0D9488),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          onChanged: (val) {
+                            setState(() => _offenceIsActive = val ?? true);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Active',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF2D3748)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _submitNewOffence,
+                        icon: const Icon(Icons.check_circle_outline, size: 18, color: Colors.white),
+                        label: const Text(
+                          'Save Offence',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF81C784),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _toggleCreateOffenceForm,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF90A4AE),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 20),
+          ),
+          const SizedBox(height: 24),
+        ],
 
         // Info Banner
         Container(
@@ -1648,146 +2980,158 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 16),
 
         // Table
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(4),
-            1: FlexColumnWidth(2),
-            2: FlexColumnWidth(2),
-            3: FlexColumnWidth(2),
-            4: FlexColumnWidth(2),
-            5: FlexColumnWidth(3),
-            6: FlexColumnWidth(3),
-          },
-          border: TableBorder(
-            horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-          ),
-          children: [
-            TableRow(
-              decoration: const BoxDecoration(
-                color: Color(0xFFFAFAFA),
-              ),
-              children: const [
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Offence', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Duplicate Days', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Grace Period Days', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Updated', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-              ],
-            ),
-            ...state.offenceConfigs.map((offObj) {
-              final Map<String, dynamic> o = offObj is Map ? Map<String, dynamic>.from(offObj) : {};
-              final offenceId = int.tryParse(o['id']?.toString() ?? '') ?? 0;
-              final name = o['offence']?.toString() ?? '-';
-              
-              final double amountVal = double.tryParse(o['challanAmount']?.toString() ?? '0') ?? 0.0;
-              final amountText = amountVal == amountVal.toInt() ? amountVal.toInt().toString() : amountVal.toString();
-              
-              final duplicateDays = o['duplicateDays']?.toString() ?? '1';
-              final gracePeriodDays = o['gracePeriodDays']?.toString() ?? '0';
-              final isActive = o['isActive'] == true;
-              final updatedTime = _formatOffenceUpdatedTime(o['updated_time']?.toString() ?? o['created_time']?.toString());
-
-              return TableRow(
-                children: [
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(amountText, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(duplicateDays, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(gracePeriodDays, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isActive ? 'Active' : 'Inactive',
-                          style: TextStyle(
-                            color: isActive ? const Color(0xFF166534) : const Color(0xFF991B1B),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double minWidth = 1000;
+            final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(4),
+                    1: FlexColumnWidth(2),
+                    2: FlexColumnWidth(2),
+                    3: FlexColumnWidth(2),
+                    4: FlexColumnWidth(2),
+                    5: FlexColumnWidth(3),
+                    6: FlexColumnWidth(3),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+                  ),
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFAFAFA),
                       ),
+                      children: const [
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Offence', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Duplicate Days', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Grace Period Days', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Updated', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
+                      ],
                     ),
-                  ),
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(updatedTime, style: const TextStyle(fontSize: 12, color: Colors.black54))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: isActive
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                OutlinedButton(
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Edit offence configuration under construction.')),
-                                    );
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: Colors.grey.shade300),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                    minimumSize: const Size(80, 28),
-                                  ),
-                                  child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                    ...state.offenceConfigs.map((offObj) {
+                      final Map<String, dynamic> o = offObj is Map ? Map<String, dynamic>.from(offObj) : {};
+                      final offenceId = int.tryParse(o['id']?.toString() ?? '') ?? 0;
+                      final name = o['offence']?.toString() ?? '-';
+                      
+                      final double amountVal = double.tryParse(o['challanAmount']?.toString() ?? '0') ?? 0.0;
+                      final amountText = amountVal == amountVal.toInt() ? amountVal.toInt().toString() : amountVal.toString();
+                      
+                      final duplicateDays = o['duplicateDays']?.toString() ?? '1';
+                      final gracePeriodDays = o['gracePeriodDays']?.toString() ?? '0';
+                      final isActive = o['isActive'] == true;
+                      final updatedTime = _formatOffenceUpdatedTime(o['updated_time']?.toString() ?? o['created_time']?.toString());
+
+                      return TableRow(
+                        children: [
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(name, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(amountText, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(duplicateDays, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(gracePeriodDays, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                                const SizedBox(height: 6),
-                                OutlinedButton(
-                                  onPressed: () => _confirmToggleOffence(offenceId, isActive),
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: Colors.grey.shade300),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                    minimumSize: const Size(80, 28),
+                                child: Text(
+                                  isActive ? 'Active' : 'Inactive',
+                                  style: TextStyle(
+                                    color: isActive ? const Color(0xFF166534) : const Color(0xFF991B1B),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  child: const Text('Deactivate', style: TextStyle(color: Colors.black87, fontSize: 11)),
                                 ),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                OutlinedButton(
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Edit offence configuration under construction.')),
-                                    );
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: Colors.grey.shade300),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                    minimumSize: const Size(60, 28),
-                                  ),
-                                  child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                                ),
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: () => _confirmToggleOffence(offenceId, isActive),
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: Colors.grey.shade300),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                    minimumSize: const Size(60, 28),
-                                  ),
-                                  child: const Text('Activate', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                                ),
-                              ],
+                              ),
                             ),
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ],
+                          ),
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(updatedTime, style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: isActive
+                                  ? Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        OutlinedButton(
+                                          onPressed: () {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Edit offence configuration under construction.')),
+                                            );
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(color: Colors.grey.shade300),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                            minimumSize: const Size(80, 28),
+                                          ),
+                                          child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        OutlinedButton(
+                                          onPressed: () => _confirmToggleOffence(offenceId, isActive),
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(color: Colors.grey.shade300),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                            minimumSize: const Size(80, 28),
+                                          ),
+                                          child: const Text('Deactivate', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                        ),
+                                      ],
+                                    )
+                                  : Row(
+                                      children: [
+                                        OutlinedButton(
+                                          onPressed: () {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Edit offence configuration under construction.')),
+                                            );
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(color: Colors.grey.shade300),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                            minimumSize: const Size(60, 28),
+                                          ),
+                                          child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        OutlinedButton(
+                                          onPressed: () => _confirmToggleOffence(offenceId, isActive),
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(color: Colors.grey.shade300),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                            minimumSize: const Size(60, 28),
+                                          ),
+                                          child: const Text('Activate', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -1803,68 +3147,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  void _showCreateOffenceDialog() {
-    final offenceController = TextEditingController();
-    final amountController = TextEditingController();
-    final dupController = TextEditingController(text: '1');
-    final graceController = TextEditingController(text: '0');
-    final offFormKey = GlobalKey<FormState>();
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create New Offence Rule', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
-          content: SizedBox(
-            width: 400,
-            child: Form(
-              key: offFormKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildInputField('Offence Name *', offenceController, true),
-                    _buildInputField('Challan Amount (₹) *', amountController, true, keyboardType: TextInputType.number),
-                    _buildInputField('Duplicate Days *', dupController, true, keyboardType: TextInputType.number),
-                    _buildInputField('Grace Period Days *', graceController, true, keyboardType: TextInputType.number),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (offFormKey.currentState?.validate() ?? false) {
-                  final navigator = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  final success = await ref.read(settingsNotifierProvider.notifier).createOffence({
-                    'offence': offenceController.text.trim(),
-                    'challanAmount': amountController.text.trim(),
-                    'duplicateDays': dupController.text.trim(),
-                    'gracePeriodDays': graceController.text.trim(),
-                  });
-                  if (success && mounted) {
-                    navigator.pop();
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Offence rule created successfully.')),
-                    );
-                  }
-                }
-              },
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   void _confirmToggleOffence(int id, bool currentActiveState) {
     final actionText = currentActiveState ? 'deactivate' : 'activate';
@@ -1899,4 +3182,92 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       },
     );
   }
+
+  Widget _buildModuleHeader({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required String buttonLabel,
+    required VoidCallback onPressed,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = MediaQuery.of(context).size.width < 600;
+        
+        final infoColumn = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F3260),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
+        );
+        
+        final actionButton = FilledButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 16),
+          label: Text(buttonLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF0D9488),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+        
+        if (isMobile) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              infoColumn,
+              const SizedBox(height: 12),
+              actionButton,
+            ],
+          );
+        } else {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: infoColumn),
+              const SizedBox(width: 16),
+              actionButton,
+            ],
+          );
+        }
+      },
+    );
+  }
 }
+
+class _SignaturePainter extends CustomPainter {
+  _SignaturePainter(this.points);
+  final List<Offset?> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.5;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      if (points[i] != null && points[i + 1] != null) {
+        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
+}
+

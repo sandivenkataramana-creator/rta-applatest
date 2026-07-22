@@ -18,11 +18,17 @@ final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((
 });
 
 class AuthState {
-  AuthState({this.user, this.token, this.isAuthenticated = false});
+  AuthState({
+    this.user,
+    this.token,
+    this.isAuthenticated = false,
+    this.isInitializing = true,
+  });
 
   final AuthUser? user;
   final AuthToken? token;
   final bool isAuthenticated;
+  final bool isInitializing;
 }
 
 class _LegacyAuthRepository {
@@ -60,12 +66,14 @@ class _LegacyAuthRepository {
     } catch (_) {}
     await _storage.deleteToken();
     await _storage.deleteRefreshToken();
+    await _storage.deleteUsername();
+    await _storage.writeRememberMe(false);
   }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier({required this.repository, required this.storage})
-    : super(AuthState()) {
+    : super(AuthState(isInitializing: true)) {
     _initialize();
   }
 
@@ -76,13 +84,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Stream<void> get authChangeStream => _authChanges.stream;
 
   Future<void> _initialize() async {
-    final remember = await storage.readRememberMe();
-    final token = await storage.readToken();
-    if (remember && token != null) {
+    try {
+      final remember = await storage.readRememberMe();
+      final token = await storage.readToken();
+      final username = await storage.readUsername() ?? 'admin';
+      
+      if (remember && token != null && token.trim().isNotEmpty) {
+        final role = username.contains('super')
+            ? 'Super Admin'
+            : username.contains('admin')
+            ? 'RTA Administrator'
+            : 'Enforcement Officer';
+        final user = AuthUser(
+          username: username,
+          name: username.toUpperCase(),
+          role: role,
+        );
+        state = AuthState(
+          user: user,
+          token: AuthToken(accessToken: token, refreshToken: ''),
+          isAuthenticated: true,
+          isInitializing: false,
+        );
+      } else {
+        state = AuthState(
+          isAuthenticated: false,
+          isInitializing: false,
+        );
+      }
+    } catch (_) {
       state = AuthState(
-        isAuthenticated: true,
-        token: AuthToken(accessToken: token, refreshToken: ''),
+        isAuthenticated: false,
+        isInitializing: false,
       );
+    } finally {
       _authChanges.add(null);
     }
   }
@@ -125,13 +160,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
       name: username.toUpperCase(),
       role: role,
     );
-    state = AuthState(user: user, token: token, isAuthenticated: true);
+    state = AuthState(
+      user: user,
+      token: token,
+      isAuthenticated: true,
+      isInitializing: false,
+    );
     _authChanges.add(null);
   }
 
   Future<void> logout() async {
     await repository.logout();
-    state = AuthState();
+    state = AuthState(
+      isAuthenticated: false,
+      isInitializing: false,
+    );
     _authChanges.add(null);
   }
 }

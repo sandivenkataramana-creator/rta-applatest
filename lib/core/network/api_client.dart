@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../storage/secure_storage_service.dart';
@@ -26,6 +27,16 @@ class ApiClient {
           responseType: ResponseType.json,
         ),
       ) {
+    if (!kIsWeb) {
+      if (_dio.httpClientAdapter is IOHttpClientAdapter) {
+        (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+          final client = HttpClient();
+          client.badCertificateCallback =
+              (X509Certificate cert, String host, int port) => true;
+          return client;
+        };
+      }
+    }
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -35,7 +46,13 @@ class ApiClient {
               options.headers['Authorization'] = 'Bearer $token';
             }
           } catch (_) {}
-          if (kDebugMode) debugPrint('→ ${options.method} ${options.uri}');
+          if (kDebugMode) {
+            var printUri = options.uri.toString();
+            if (printUri.contains('password=')) {
+              printUri = printUri.replaceAll(RegExp(r'password=[^&]*'), 'password=***');
+            }
+            debugPrint('→ ${options.method} $printUri');
+          }
           handler.next(options);
         },
         onResponse: (response, handler) {

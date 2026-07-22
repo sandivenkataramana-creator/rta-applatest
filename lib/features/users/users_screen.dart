@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/page_header_banner.dart';
 
 class UsersScreen extends StatelessWidget {
   const UsersScreen({super.key});
@@ -27,9 +28,9 @@ class UsersScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Users',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            const PageHeaderBanner(
+              title: 'Support Center',
+              subtitle: 'Government of Telangana Transport Department',
             ),
             const SizedBox(height: 16),
             Expanded(

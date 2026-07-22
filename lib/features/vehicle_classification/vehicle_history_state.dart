@@ -14,6 +14,9 @@ class VehicleHistoryState {
     this.isSearched = false,
     this.searchText = '',
     this.error,
+    this.vehicleDetail,
+    this.expiryDetails = const [],
+    this.challanDetails,
   });
 
   final List<dynamic> searchResults;
@@ -22,6 +25,9 @@ class VehicleHistoryState {
   final bool isSearched;
   final String searchText;
   final String? error;
+  final Map<String, dynamic>? vehicleDetail;
+  final List<dynamic> expiryDetails;
+  final Map<String, dynamic>? challanDetails;
 
   VehicleHistoryState copyWith({
     List<dynamic>? searchResults,
@@ -30,6 +36,9 @@ class VehicleHistoryState {
     bool? isSearched,
     String? searchText,
     String? error,
+    Map<String, dynamic>? vehicleDetail,
+    List<dynamic>? expiryDetails,
+    Map<String, dynamic>? challanDetails,
   }) {
     return VehicleHistoryState(
       searchResults: searchResults ?? this.searchResults,
@@ -38,6 +47,9 @@ class VehicleHistoryState {
       isSearched: isSearched ?? this.isSearched,
       searchText: searchText ?? this.searchText,
       error: error,
+      vehicleDetail: vehicleDetail ?? this.vehicleDetail,
+      expiryDetails: expiryDetails ?? this.expiryDetails,
+      challanDetails: challanDetails ?? this.challanDetails,
     );
   }
 }
@@ -64,27 +76,55 @@ class VehicleHistoryNotifier extends StateNotifier<VehicleHistoryState> {
 
   Future<void> searchVehicle(String vehicleNumber) async {
     if (vehicleNumber.trim().isEmpty) return;
+    final query = vehicleNumber.trim();
     
     state = state.copyWith(
       isLoading: true,
       isSearched: true,
-      searchText: vehicleNumber,
+      searchText: query,
+      vehicleDetail: null,
+      expiryDetails: const [],
+      challanDetails: null,
     );
 
     try {
-      // Fetch notifications list and filter by vehicleNumber locally
-      // We can fetch a reasonably large batch (e.g. limit: 200) to find the vehicle's history
-      final notifications = await monitoringRepo.fetchNotifications(pageNumber: 1, limit: 200);
+      // 1. Search by vehicle number
+      final searchRes = await classificationRepo.searchByVehicleNumber(query);
+      final vehicleMap = searchRes?['vehicle'] as Map<String, dynamic>?;
       
-      final query = vehicleNumber.trim().toLowerCase();
-      final filtered = notifications.where((item) {
-        final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-        final vNo = vehicle['vehicleNumber']?.toString().toLowerCase() ?? '';
-        return vNo.contains(query);
-      }).toList();
+      int? vehicleId = vehicleMap?['id'] as int?;
+      
+      // 2. Fetch expiry details if we have vehicle ID
+      List<dynamic> expiry = const [];
+      if (vehicleId != null) {
+        try {
+          expiry = await classificationRepo.getVehicleExpiryDate(vehicleId);
+        } catch (e) {
+          debugPrint('Error fetching expiry details: $e');
+        }
+      }
+
+      // 3. Fetch active challans
+      Map<String, dynamic>? challansMap;
+      try {
+        challansMap = await classificationRepo.getVehicleChallansByNumber(query);
+      } catch (e) {
+        debugPrint('Error fetching challan details: $e');
+      }
+
+      // 4. Fetch search notifications (detections history)
+      List<dynamic> searchNotifications = const [];
+      try {
+        searchNotifications = await classificationRepo.searchNotificationsByVehicleNumber(query);
+      } catch (e) {
+        debugPrint('Error fetching notifications list: $e');
+      }
 
       state = state.copyWith(
-        searchResults: filtered,
+        vehicleDetail: vehicleMap,
+        expiryDetails: expiry,
+        challanDetails: challansMap,
+        searchResults: searchNotifications,
         isLoading: false,
       );
     } catch (e) {
@@ -100,6 +140,9 @@ class VehicleHistoryNotifier extends StateNotifier<VehicleHistoryState> {
       searchResults: const [],
       isSearched: false,
       searchText: '',
+      vehicleDetail: null,
+      expiryDetails: const [],
+      challanDetails: null,
     );
   }
 }

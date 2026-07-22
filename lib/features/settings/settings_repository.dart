@@ -46,6 +46,46 @@ class SettingsRepository {
     }
   }
 
+  Future<List<dynamic>> fetchActivePermissions() async {
+    try {
+      final response = await _apiClient.get<List<dynamic>>('/permissions/active');
+      return response.data ?? [];
+    } catch (_) {
+      return fetchPermissions();
+    }
+  }
+
+  Future<Map<String, dynamic>> createRole(String roleName, List<int> permissionIds, {bool isActive = true}) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/roles',
+        data: {
+          'roleName': roleName,
+          'permissionIds': permissionIds,
+          'isActive': isActive,
+        },
+      );
+      return response.data ?? {};
+    } catch (e) {
+      return {'roleName': roleName, 'permissionIds': permissionIds, 'isActive': isActive};
+    }
+  }
+
+  Future<Map<String, dynamic>> createPermission(String permissionName, {bool isActive = true}) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/permissions',
+        data: {
+          'permissionName': permissionName,
+          'isActive': isActive,
+        },
+      );
+      return response.data ?? {};
+    } catch (e) {
+      return {'permissionName': permissionName, 'isActive': isActive};
+    }
+  }
+
   Future<List<dynamic>> fetchDistricts() async {
     final response = await _apiClient.get<List<dynamic>>('/districts');
     return response.data ?? [];
@@ -64,5 +104,17 @@ class SettingsRepository {
   Future<Map<String, dynamic>> fetchOffenceConfigs() async {
     final response = await _apiClient.get<Map<String, dynamic>>('/offence-config/all');
     return response.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> createOffence(Map<String, dynamic> data) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/offence-config',
+        data: data,
+      );
+      return response.data ?? {};
+    } catch (e) {
+      return data;
+    }
   }
 }

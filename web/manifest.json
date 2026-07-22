@@ -1,6 +1,6 @@
 {
-    "name": "rta_app",
-    "short_name": "rta_app",
+    "name": "TGRTA ANPR",
+    "short_name": "TGRTA ANPR",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

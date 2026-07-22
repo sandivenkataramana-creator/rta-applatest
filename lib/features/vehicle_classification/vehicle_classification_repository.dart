@@ -22,4 +22,33 @@ class VehicleClassificationRepository {
     );
     return response.data?['data'] ?? [];
   }
+
+  Future<Map<String, dynamic>?> searchByVehicleNumber(String vehicleNumber) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/rta/searchByVehicleNumber/$vehicleNumber',
+    );
+    return response.data;
+  }
+
+  Future<List<dynamic>> getVehicleExpiryDate(int vehicleId) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/rta/getVehicleExpiryDate/$vehicleId',
+    );
+    return response.data?['data'] ?? [];
+  }
+
+  Future<Map<String, dynamic>?> getVehicleChallansByNumber(String vehicleNumber) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/rta/getVehicleChallansByNumber/$vehicleNumber',
+    );
+    return response.data;
+  }
+
+  Future<List<dynamic>> searchNotificationsByVehicleNumber(String vehicleNumber) async {
+    final response = await _apiClient.get<List<dynamic>>(
+      '/notifications/vehicle-search',
+      queryParameters: {'vehicleNumber': vehicleNumber},
+    );
+    return response.data ?? [];
+  }
 }

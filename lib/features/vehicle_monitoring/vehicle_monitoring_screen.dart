@@ -8,7 +8,9 @@ import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/widgets/loading_overlay.dart';
 import '../../core/widgets/responsive_scaffold.dart'; // import sidebarCollapsedProvider
+import '../../core/widgets/page_header_banner.dart';
 import '../../core/widgets/network_image_helper.dart';
+import '../../core/widgets/image_zoom_helper.dart';
 import 'vehicle_monitoring_models.dart';
 import 'vehicle_monitoring_repository.dart';
 
@@ -482,72 +484,74 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    // Vehicle Number Badge (dark blue)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF0F3260),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      child: Text(
-                                        vehicleNumber,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      // Vehicle Number Badge (dark blue)
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F3260),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        child: Text(
+                                          vehicleNumber,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Category Badge (grey background)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade200,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                      child: Text(
-                                        vehicleCategory,
-                                        style: TextStyle(
-                                          color: Colors.grey.shade800,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
+                                      // Category Badge (grey background)
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        child: Text(
+                                          vehicleCategory,
+                                          style: TextStyle(
+                                            color: Colors.grey.shade800,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Vehicle Type Badge (light blue background)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE3F2FD),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      child: Text(
-                                        vehicleType,
-                                        style: const TextStyle(
-                                          color: Color(0xFF1E88E5),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
+                                      // Vehicle Type Badge (light blue background)
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE3F2FD),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        child: Text(
+                                          vehicleType,
+                                          style: const TextStyle(
+                                            color: Color(0xFF1E88E5),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Captured at $cameraName - $detectedAt',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey.shade600,
+                                    ],
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Captured at $cameraName - $detectedAt',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             // Close Button
                             Container(
@@ -594,7 +598,13 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.stretch,
                                           children: [
-                                            _buildImage(imgUrl, height: 260, fit: BoxFit.cover),
+                                            GestureDetector(
+                                              onTap: () => showZoomedImageDialog(context, imgUrl),
+                                              child: MouseRegion(
+                                                cursor: SystemMouseCursors.click,
+                                                child: _buildImage(imgUrl, height: 260, fit: BoxFit.cover),
+                                              ),
+                                            ),
                                             Padding(
                                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                               child: Row(
@@ -898,13 +908,13 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                   child: OutlinedButton(
                                                     onPressed: () {},
                                                     style: OutlinedButton.styleFrom(
-                                                      side: const BorderSide(color: Color(0xFF0F5D55)),
+                                                      side: const BorderSide(color: Color(0xFF0D9488)),
                                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                                     ),
                                                     child: const Text(
                                                       'View Details',
-                                                      style: TextStyle(color: Color(0xFF0F5D55), fontSize: 11, fontWeight: FontWeight.bold),
+                                                      style: TextStyle(color: Color(0xFF0D9488), fontSize: 11, fontWeight: FontWeight.bold),
                                                     ),
                                                   ),
                                                 ),
@@ -925,36 +935,32 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                         ),
                                       ),
                                       const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            flex: 3,
-                                            child: TextField(
-                                              controller: customNameCtrl,
-                                              decoration: InputDecoration(
-                                                hintText: 'Enter Offence Name',
-                                                hintStyle: const TextStyle(fontSize: 12),
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                              ),
+                                      LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final isMobile = constraints.maxWidth < 500;
+                                          
+                                          final offenceField = TextField(
+                                            controller: customNameCtrl,
+                                            decoration: InputDecoration(
+                                              hintText: 'Enter Offence Name',
+                                              hintStyle: const TextStyle(fontSize: 12),
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                                             ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            flex: 2,
-                                            child: TextField(
-                                              controller: customAmountCtrl,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                              decoration: InputDecoration(
-                                                hintText: 'Enter Amount',
-                                                hintStyle: const TextStyle(fontSize: 12),
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                              ),
+                                          );
+                                          
+                                          final amountField = TextField(
+                                            controller: customAmountCtrl,
+                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                            decoration: InputDecoration(
+                                              hintText: 'Enter Amount',
+                                              hintStyle: const TextStyle(fontSize: 12),
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                                             ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          ElevatedButton(
+                                          );
+                                          
+                                          final addButton = ElevatedButton(
                                             onPressed: () {
                                               final name = customNameCtrl.text.trim();
                                               final amt = double.tryParse(customAmountCtrl.text);
@@ -972,8 +978,35 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                             ),
                                             child: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                          ),
-                                        ],
+                                          );
+
+                                          if (isMobile) {
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                offenceField,
+                                                const SizedBox(height: 8),
+                                                Row(
+                                                  children: [
+                                                    Expanded(child: amountField),
+                                                    const SizedBox(width: 8),
+                                                    addButton,
+                                                  ],
+                                                ),
+                                              ],
+                                            );
+                                          } else {
+                                            return Row(
+                                              children: [
+                                                Expanded(flex: 3, child: offenceField),
+                                                const SizedBox(width: 12),
+                                                Expanded(flex: 2, child: amountField),
+                                                const SizedBox(width: 12),
+                                                addButton,
+                                              ],
+                                            );
+                                          }
+                                        },
                                       ),
 
                                       if (customOffences.isNotEmpty) ...[
@@ -1007,37 +1040,75 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                       const SizedBox(height: 24),
 
                                       // Total Challan Amount field on the right
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Text(
-                                              'Total Challan Amount',
-                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Container(
-                                              width: 150,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(color: Colors.grey.shade400),
-                                                borderRadius: BorderRadius.circular(4),
-                                                color: Colors.grey.shade100,
-                                              ),
+                                      LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final isMobile = constraints.maxWidth < 450;
+                                          
+                                          if (isMobile) {
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: [
+                                                const Text(
+                                                  'Total Challan Amount',
+                                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  width: 150,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.grey.shade400),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    color: Colors.grey.shade100,
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      const Text('₹', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                      Text(
+                                                        totalChallanAmount.toStringAsFixed(2),
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          } else {
+                                            return Align(
+                                              alignment: Alignment.centerRight,
                                               child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Text('₹', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                                  Text(
-                                                    totalChallanAmount.toStringAsFixed(2),
-                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                  const Text(
+                                                    'Total Challan Amount',
+                                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Container(
+                                                    width: 150,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(color: Colors.grey.shade400),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      color: Colors.grey.shade100,
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        const Text('₹', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                        Text(
+                                                          totalChallanAmount.toStringAsFixed(2),
+                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
                                                 ],
                                               ),
-                                            ),
-                                          ],
-                                        ),
+                                            );
+                                          }
+                                        },
                                       ),
                                     ],
                                   ),
@@ -1053,8 +1124,11 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                       Container(
                         color: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             ElevatedButton(
                               onPressed: () {
@@ -1070,7 +1144,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                               child: const Text('Close', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
-                            const SizedBox(width: 12),
                             OutlinedButton.icon(
                               onPressed: () {},
                               icon: const Icon(Icons.description, size: 16, color: Colors.black87),
@@ -1081,7 +1154,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               ),
                             ),
-                            const SizedBox(width: 12),
                             OutlinedButton(
                               onPressed: () {},
                               style: OutlinedButton.styleFrom(
@@ -1091,7 +1163,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                               child: const Text('Collect', style: TextStyle(color: Color(0xFF28A745), fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
-                            const SizedBox(width: 12),
                             ElevatedButton(
                               onPressed: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1109,7 +1180,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                               child: const Text('Raise Challan', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
-                            const SizedBox(width: 12),
                             ElevatedButton(
                               onPressed: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1401,6 +1471,11 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              PageHeaderBanner(
+                title: widget.isLiveFeed ? 'Live Vehicle Feed' : 'Vehicle Monitoring & History',
+                subtitle: widget.isLiveFeed ? 'Real-time Automatic Number Plate Recognition Stream' : 'Government of Telangana Transport Department',
+              ),
+              const SizedBox(height: 16),
               // Top Cascading Filters Container
               Container(
                 decoration: BoxDecoration(
@@ -1422,7 +1497,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           height: 35,
                           errorBuilder: (context, error, stackTrace) => const Icon(
                             Icons.account_balance,
-                            color: Color(0xFF0F5D55),
+                            color: Color(0xFF0D9488),
                             size: 24,
                           ),
                         ),
@@ -1500,7 +1575,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         });
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F5D55),
+                        backgroundColor: const Color(0xFF0D9488),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -1537,21 +1612,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Row(
-                            children: [
-                              logo,
-                              const SizedBox(width: 12),
-                              const Text(
-                                'VIEAS Live vehicle Feed',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F5D55),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
                           districtDropdown,
                           const SizedBox(height: 8),
                           zoneDropdown,
@@ -1640,169 +1700,181 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
               const SizedBox(height: 16),
 
               // Table list in white Card
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 2,
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    // Navy Table Header
-                    Container(
-                      color: const Color(0xFF0F3260),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 24), // Car Icon spacer
-                          _buildTableHeader('Time', 'Time', flex: 2),
-                          _buildTableHeader('Vehicle Number', 'VehicleNumber', flex: 2),
-                          _buildTableHeader('Vehicle Type', 'VehicleType', flex: 2),
-                          _buildTableHeader('Camera', 'Camera', flex: 3),
-                          const Expanded(
-                            flex: 5,
-                            child: Text(
-                              'Remarks',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final double minWidth = 1100;
+                  final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: contentWidth,
+                      child: Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 2,
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            // Navy Table Header
+                            Container(
+                              color: const Color(0xFF0F3260),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 24), // Car Icon spacer
+                                  _buildTableHeader('Time', 'Time', flex: 2),
+                                  _buildTableHeader('Vehicle Number', 'VehicleNumber', flex: 2),
+                                  _buildTableHeader('Vehicle Type', 'VehicleType', flex: 2),
+                                  _buildTableHeader('Camera', 'Camera', flex: 3),
+                                  const Expanded(
+                                    flex: 5,
+                                    child: Text(
+                                      'Remarks',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Status',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(
+                                    flex: 1,
+                                    child: Text(
+                                      '',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          const Expanded(
-                            flex: 2,
-                            child: Text(
-                              'Status',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          const Expanded(
-                            flex: 1,
-                            child: Text(
-                              '',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
+
+                            // Table rows
+                            paginated.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 40),
+                                    child: Center(
+                                      child: Text(
+                                        'No vehicle violations found matching the filters.',
+                                        style: TextStyle(color: Colors.black54),
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: paginated.length,
+                                    separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
+                                    itemBuilder: (context, index) {
+                                      final item = paginated[index];
+                                      final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+                                      final isCompliant = vehicle['allClear'] == true;
+                                      final vehicleTypeLabel = vehicle['vehicleCategory'] == 'T' ? 'Transport' : 'Non-transport';
+
+                                      return Container(
+                                        color: index % 2 == 0 ? Colors.white : const Color(0xFFF7FAFA),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.directions_car,
+                                              color: Color(0xFF555555),
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                _formatDateTime(vehicle['imageDetectionTime']?.toString()),
+                                                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                vehicle['vehicleNumber']?.toString() ?? 'N/A',
+                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                vehicleTypeLabel,
+                                                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A',
+                                                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 5,
+                                              child: _buildRemarksRichText(vehicle),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                isCompliant ? 'Compliant' : 'Non-Compliant',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isCompliant ? const Color(0xFF2FA85C) : const Color(0xFFE289A3),
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 1,
+                                              child: Align(
+                                                alignment: Alignment.centerRight,
+                                                child: OutlinedButton(
+                                                  onPressed: () => _showDetailsDialog(context, item, state),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFF0D9488)),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                  ),
+                                                  child: const Text(
+                                                    'View',
+                                                    style: TextStyle(
+                                                      color: Color(0xFF0D9488),
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ],
+                        ),
                       ),
                     ),
-
-                    // Table rows
-                    paginated.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
-                            child: Center(
-                              child: Text(
-                                'No vehicle violations found matching the filters.',
-                                style: TextStyle(color: Colors.black54),
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: paginated.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
-                            itemBuilder: (context, index) {
-                              final item = paginated[index];
-                              final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-                              final isCompliant = vehicle['allClear'] == true;
-                              final vehicleTypeLabel = vehicle['vehicleCategory'] == 'T' ? 'Transport' : 'Non-transport';
-
-                              return Container(
-                                color: index % 2 == 0 ? Colors.white : const Color(0xFFF7FAFA),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.directions_car,
-                                      color: Color(0xFF555555),
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        _formatDateTime(vehicle['imageDetectionTime']?.toString()),
-                                        style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        vehicle['vehicleNumber']?.toString() ?? 'N/A',
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        vehicleTypeLabel,
-                                        style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(
-                                        vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A',
-                                        style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 5,
-                                      child: _buildRemarksRichText(vehicle),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        isCompliant ? 'Compliant' : 'Non-Compliant',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: isCompliant ? const Color(0xFF2FA85C) : const Color(0xFFE289A3),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 1,
-                                      child: Align(
-                                        alignment: Alignment.centerRight,
-                                        child: OutlinedButton(
-                                          onPressed: () => _showDetailsDialog(context, item, state),
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(color: Color(0xFF0F5D55)),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          ),
-                                          child: const Text(
-                                            'View',
-                                            style: TextStyle(
-                                              color: Color(0xFF0F5D55),
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ],
-                ),
+                  );
+                },
               ),
 
               // Pagination
@@ -1931,6 +2003,11 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeaderBanner(
+                title: 'Vehicle Monitoring & History',
+                subtitle: 'Government of Telangana Transport Department',
+              ),
+              const SizedBox(height: 16),
               // Top Filter Bar
               Container(
                 decoration: BoxDecoration(
@@ -1999,7 +2076,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         notifier.fetchNotifications();
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F5D55),
+                        backgroundColor: const Color(0xFF0D9488),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -2119,224 +2196,236 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
               const SizedBox(height: 16),
 
               // Data Table
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 2,
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    // Table Header
-                    Container(
-                      color: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Row(
-                        children: [
-                          _buildTableHeader('Time', 'Time', flex: 3),
-                          _buildTableHeader('Vehicle', 'VehicleNumber', flex: 2),
-                          _buildTableHeader('Type', 'VehicleType', flex: 2),
-                          _buildTableHeader('Camera', 'Camera', flex: 3),
-                          Expanded(
-                            flex: 4,
-                            child: Text(
-                              'Violation',
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final double minWidth = 1100;
+                  final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: contentWidth,
+                      child: Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 2,
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            // Table Header
+                            Container(
+                              color: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  _buildTableHeader('Time', 'Time', flex: 3),
+                                  _buildTableHeader('Vehicle', 'VehicleNumber', flex: 2),
+                                  _buildTableHeader('Type', 'VehicleType', flex: 2),
+                                  _buildTableHeader('Camera', 'Camera', flex: 3),
+                                  Expanded(
+                                    flex: 4,
+                                    child: Text(
+                                      'Violation',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Status',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(
+                                    flex: 1,
+                                    child: SizedBox(),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              'Status',
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          const Expanded(
-                            flex: 1,
-                            child: SizedBox(),
-                          ),
-                        ],
+                            const Divider(height: 1, color: Colors.black12),
+
+                            // Table Rows
+                            paginated.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 40),
+                                    child: Center(
+                                      child: Text(
+                                        'No historical records found.',
+                                        style: TextStyle(color: Colors.black54),
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: paginated.length,
+                                    separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
+                                    itemBuilder: (context, index) {
+                                      final item = paginated[index] as Map<String, dynamic>? ?? {};
+                                      final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+                                      final typeLabel = _deriveVehicleType(vehicle);
+                                      final violationText = _deriveViolationText(vehicle, item);
+                                      final statusText = _deriveStatus(vehicle, item);
+
+                                      // Type badge color
+                                      Color typeBadgeBg;
+                                      Color typeBadgeText;
+                                      if (typeLabel == 'COMMERCIAL') {
+                                        typeBadgeBg = const Color(0xFFDBEAFE);
+                                        typeBadgeText = const Color(0xFF1E40AF);
+                                      } else if (typeLabel == 'TRANSPORT') {
+                                        typeBadgeBg = const Color(0xFFDCFCE7);
+                                        typeBadgeText = const Color(0xFF166534);
+                                      } else {
+                                        typeBadgeBg = const Color(0xFFDCFCE7);
+                                        typeBadgeText = const Color(0xFF166534);
+                                      }
+
+                                      // Status badge color
+                                      Color statusBadgeColor;
+                                      if (statusText == 'NA') {
+                                        statusBadgeColor = const Color(0xFF7C3AED);
+                                      } else if (statusText == 'COMPLIANT') {
+                                        statusBadgeColor = const Color(0xFF16A34A);
+                                      } else {
+                                        statusBadgeColor = const Color(0xFFE11D48);
+                                      }
+
+                                      return Container(
+                                        color: index % 2 == 0 ? Colors.white : const Color(0xFFFAFAFA),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        child: Row(
+                                          children: [
+                                            // Time
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                _historyFormatTime(vehicle['createdTime']?.toString()),
+                                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                              ),
+                                            ),
+                                            // Vehicle
+                                            Expanded(
+                                              flex: 2,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      vehicle['vehicleNumber']?.toString() ?? 'N/A',
+                                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Type badge
+                                            Expanded(
+                                              flex: 2,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: typeBadgeBg,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    typeLabel,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: typeBadgeText,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // Camera
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A',
+                                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            // Violation
+                                            Expanded(
+                                              flex: 4,
+                                              child: Text(
+                                                violationText,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: violationText == 'ALL CLEAR' ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            // Status badge
+                                            Expanded(
+                                              flex: 2,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Text(
+                                                  statusText,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: statusBadgeColor,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // View button
+                                            Expanded(
+                                              flex: 1,
+                                              child: Align(
+                                                alignment: Alignment.centerRight,
+                                                child: OutlinedButton(
+                                                  onPressed: () => _showDetailsDialog(context, item, state),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFF3B82F6)),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                                  ),
+                                                  child: const Text(
+                                                    'View',
+                                                    style: TextStyle(
+                                                      color: Color(0xFF3B82F6),
+                                                      fontWeight: FontWeight.w600,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ],
+                        ),
                       ),
                     ),
-                    const Divider(height: 1, color: Colors.black12),
-
-                    // Table Rows
-                    paginated.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
-                            child: Center(
-                              child: Text(
-                                'No historical records found.',
-                                style: TextStyle(color: Colors.black54),
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: paginated.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
-                            itemBuilder: (context, index) {
-                              final item = paginated[index] as Map<String, dynamic>? ?? {};
-                              final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-                              final typeLabel = _deriveVehicleType(vehicle);
-                              final violationText = _deriveViolationText(vehicle, item);
-                              final statusText = _deriveStatus(vehicle, item);
-
-                              // Type badge color
-                              Color typeBadgeBg;
-                              Color typeBadgeText;
-                              if (typeLabel == 'COMMERCIAL') {
-                                typeBadgeBg = const Color(0xFFDBEAFE);
-                                typeBadgeText = const Color(0xFF1E40AF);
-                              } else if (typeLabel == 'TRANSPORT') {
-                                typeBadgeBg = const Color(0xFFDCFCE7);
-                                typeBadgeText = const Color(0xFF166534);
-                              } else {
-                                typeBadgeBg = const Color(0xFFDCFCE7);
-                                typeBadgeText = const Color(0xFF166534);
-                              }
-
-                              // Status badge color
-                              Color statusBadgeColor;
-                              if (statusText == 'NA') {
-                                statusBadgeColor = const Color(0xFF7C3AED);
-                              } else if (statusText == 'COMPLIANT') {
-                                statusBadgeColor = const Color(0xFF16A34A);
-                              } else {
-                                statusBadgeColor = const Color(0xFFE11D48);
-                              }
-
-                              return Container(
-                                color: index % 2 == 0 ? Colors.white : const Color(0xFFFAFAFA),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Row(
-                                  children: [
-                                    // Time
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(
-                                        _historyFormatTime(vehicle['createdTime']?.toString()),
-                                        style: const TextStyle(fontSize: 12, color: Colors.black87),
-                                      ),
-                                    ),
-                                    // Vehicle
-                                    Expanded(
-                                      flex: 2,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              vehicle['vehicleNumber']?.toString() ?? 'N/A',
-                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    // Type badge
-                                    Expanded(
-                                      flex: 2,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: typeBadgeBg,
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            typeLabel,
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: typeBadgeText,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // Camera
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(
-                                        vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A',
-                                        style: const TextStyle(fontSize: 12, color: Colors.black87),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    // Violation
-                                    Expanded(
-                                      flex: 4,
-                                      child: Text(
-                                        violationText,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: violationText == 'ALL CLEAR' ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    // Status badge
-                                    Expanded(
-                                      flex: 2,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          statusText,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: statusBadgeColor,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // View button
-                                    Expanded(
-                                      flex: 1,
-                                      child: Align(
-                                        alignment: Alignment.centerRight,
-                                        child: OutlinedButton(
-                                          onPressed: () => _showDetailsDialog(context, item, state),
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(color: Color(0xFF3B82F6)),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                          ),
-                                          child: const Text(
-                                            'View',
-                                            style: TextStyle(
-                                              color: Color(0xFF3B82F6),
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ],
-                ),
+                  );
+                },
               ),
 
               // Pagination

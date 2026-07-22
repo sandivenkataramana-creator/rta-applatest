@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../core/constants/app_constants.dart';
 import '../core/widgets/responsive_scaffold.dart';
 import '../features/alerts/alerts_screen.dart';
-import '../features/anpr/anpr_records_screen.dart';
+import '../features/anpr/vehicle_export_screen.dart';
 import '../features/auth/auth_notifier.dart';
 import '../features/auth/login_screen.dart';
 import '../features/analytics/analytics_screen.dart';
@@ -17,30 +17,47 @@ import '../features/reports/reports_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/vehicle_classification/vehicle_classification_screen.dart';
 import '../features/vehicle_monitoring/vehicle_monitoring_screen.dart';
+import '../features/splash/splash_screen.dart';
 import '../features/users/users_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
 
   return GoRouter(
-    initialLocation: AppRoutes.login,
+    initialLocation: AppRoutes.splash,
     debugLogDiagnostics: false,
     refreshListenable: GoRouterRefreshStream(
       ref.watch(authNotifierProvider.notifier).authChangeStream,
     ),
     redirect: (context, state) {
+      final isInitializing = authState.isInitializing;
       final loggedIn = authState.isAuthenticated;
-      final loggingIn = state.uri.toString() == AppRoutes.login;
+      final currentLoc = state.uri.toString();
+      final isSplashing = currentLoc == AppRoutes.splash;
+      final isLoggingIn = currentLoc == AppRoutes.login;
 
-      if (!loggedIn && !loggingIn) {
-        return AppRoutes.login;
+      // 1. While auth state is initializing from storage, stay on Splash
+      if (isInitializing) {
+        return isSplashing ? null : AppRoutes.splash;
       }
-      if (loggedIn && loggingIn) {
+
+      // 2. If not logged in and not on login page, redirect to Login
+      if (!loggedIn) {
+        return isLoggingIn ? null : AppRoutes.login;
+      }
+
+      // 3. If logged in and on Splash or Login page, redirect to Dashboard
+      if (loggedIn && (isSplashing || isLoggingIn)) {
         return AppRoutes.dashboard;
       }
+
       return null;
     },
     routes: [
+      GoRoute(
+        path: AppRoutes.splash,
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
@@ -67,7 +84,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: AppRoutes.anprRecords,
-            builder: (context, state) => const AnprRecordsScreen(),
+            builder: (context, state) => const VehicleExportScreen(),
           ),
           GoRoute(
             path: AppRoutes.liveFeed,

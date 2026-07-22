@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/widgets/loading_overlay.dart';
 import '../../core/widgets/network_image_helper.dart';
+import '../../core/widgets/page_header_banner.dart';
 import 'alerts_state.dart';
 
 class AlertsScreen extends ConsumerStatefulWidget {
@@ -259,6 +260,11 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeaderBanner(
+                title: 'Details Not Found Records',
+                subtitle: 'Government of Telangana Transport Department',
+              ),
+              const SizedBox(height: 16),
               Container(
                 decoration: const BoxDecoration(color: Color(0xFFF3F6F6)),
                 child: LayoutBuilder(
@@ -313,7 +319,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                         setState(() => _currentPage = 1);
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F5D55),
+                        backgroundColor: const Color(0xFF0D9488),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                       ),
@@ -396,133 +402,161 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                elevation: 2,
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    Container(
-                      color: const Color(0xFF0F3260),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Row(
-                        children: [
-                          _buildTableHeader('Time', 'Time', flex: 3),
-                          _buildTableHeader('Vehicle', 'VehicleNumber', flex: 2),
-                          _buildTableHeader('Type', 'VehicleType', flex: 2),
-                          _buildTableHeader('Camera', 'Camera', flex: 3),
-                          const Expanded(
-                            flex: 3,
-                            child: Text('Remarks', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                          const Expanded(
-                            flex: 3,
-                            child: Text('Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                          const Expanded(flex: 1, child: SizedBox()),
-                        ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final double minWidth = 1100;
+                  final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: contentWidth,
+                      child: Card(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 2,
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            Container(
+                              color: const Color(0xFF0F3260),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  _buildTableHeader('Time', 'Time', flex: 3),
+                                  _buildTableHeader('Vehicle', 'VehicleNumber', flex: 2),
+                                  _buildTableHeader('Type', 'VehicleType', flex: 2),
+                                  _buildTableHeader('Camera', 'Camera', flex: 3),
+                                  const Expanded(
+                                    flex: 3,
+                                    child: Text('Remarks', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ),
+                                  const Expanded(
+                                    flex: 3,
+                                    child: Text('Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ),
+                                  const Expanded(flex: 1, child: SizedBox()),
+                                ],
+                              ),
+                            ),
+                            paginated.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 40),
+                                    child: Center(child: Text('No details not found records matching search/filters.', style: TextStyle(color: Colors.black54))),
+                                  )
+                                : ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: paginated.length,
+                                    separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
+                                    itemBuilder: (context, index) {
+                                      final item = paginated[index] as Map<String, dynamic>? ?? {};
+                                      final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+                                      final cameraName = vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A';
+
+                                      return Container(
+                                        color: index % 2 == 0 ? Colors.white : const Color(0xFFF7FAFA),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(_formatDateTime(vehicle['createdTime']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      vehicle['vehicleNumber']?.toString() ?? 'N/A',
+                                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(4)),
+                                                  child: const Text('UNKNOWN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED))),
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(cameraName, style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis),
+                                            ),
+                                            // Remarks
+                                            Expanded(
+                                              flex: 3,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFFEF3C7),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    item['remarks']?.toString().toUpperCase() ?? 'DETAILS NOT FOUND',
+                                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // Status
+                                            Expanded(
+                                              flex: 3,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFD1FAE5), // soft green
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    item['status']?.toString().toUpperCase() ?? 'PENDING',
+                                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 1,
+                                              child: Align(
+                                                alignment: Alignment.centerRight,
+                                                child: OutlinedButton(
+                                                  onPressed: () => _showDetailsDialog(context, item),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFF0D9488)),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                  ),
+                                                  child: const Text('View', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold, fontSize: 13)),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ],
+                        ),
                       ),
                     ),
-                    paginated.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
-                            child: Center(child: Text('No details not found records matching search/filters.', style: TextStyle(color: Colors.black54))),
-                          )
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: paginated.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
-                            itemBuilder: (context, index) {
-                              final item = paginated[index] as Map<String, dynamic>? ?? {};
-                              final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-                              final cameraName = vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A';
-
-                              return Container(
-                                color: index % 2 == 0 ? Colors.white : const Color(0xFFF7FAFA),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(_formatDateTime(vehicle['createdTime']?.toString()), style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              vehicle['vehicleNumber']?.toString() ?? 'N/A',
-                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(4)),
-                                          child: const Text('UNKNOWN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED))),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(cameraName, style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(4)),
-                                          child: const Text('DETAILS NOT FOUND.', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(4)),
-                                          child: const Text('DETAILS NOT FOUND', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 1,
-                                      child: Align(
-                                        alignment: Alignment.centerRight,
-                                        child: OutlinedButton(
-                                          onPressed: () => _showDetailsDialog(context, item),
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(color: Color(0xFF0F5D55)),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          ),
-                                          child: const Text('View', style: TextStyle(color: Color(0xFF0F5D55), fontWeight: FontWeight.bold, fontSize: 13)),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ],
-                ),
+                  );
+                },
               ),
               _buildPaginationControls(totalItems, _itemsPerPage, totalPages),
             ],
@@ -546,34 +580,61 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 4),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isCurrent ? const Color(0xFF0F5D55) : Colors.transparent,
+              color: isCurrent ? const Color(0xFF0D9488) : Colors.transparent,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: isCurrent ? const Color(0xFF0F5D55) : Colors.grey.shade300),
+              border: Border.all(color: isCurrent ? const Color(0xFF0D9488) : Colors.grey.shade300),
             ),
             child: Text('$i', style: TextStyle(color: isCurrent ? Colors.white : Colors.black87, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
           ),
         ),
       );
     }
+    final bool isMobile = MediaQuery.of(context).size.width < 750;
+    
+    final showingText = Text(
+      'Showing $startItem-$endItem of $totalItems records',
+      style: const TextStyle(fontSize: 12, color: Colors.black54),
+      textAlign: isMobile ? TextAlign.center : TextAlign.left,
+    );
+
+    final controlsRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton(
+          onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+          child: const Text('‹', style: TextStyle(fontSize: 18, color: Colors.black54)),
+        ),
+        ...pageButtons,
+        TextButton(
+          onPressed: _currentPage < totalPages ? () => setState(() => _currentPage++) : null,
+          child: const Text('›', style: TextStyle(fontSize: 18, color: Colors.black54)),
+        ),
+      ],
+    );
+
+    if (isMobile) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          children: [
+            showingText,
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: controlsRow,
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('Showing $startItem-$endItem of $totalItems records', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-          Row(
-            children: [
-              TextButton(
-                onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
-                child: const Text('‹', style: TextStyle(fontSize: 18, color: Colors.black54)),
-              ),
-              ...pageButtons,
-              TextButton(
-                onPressed: _currentPage < totalPages ? () => setState(() => _currentPage++) : null,
-                child: const Text('›', style: TextStyle(fontSize: 18, color: Colors.black54)),
-              ),
-            ],
-          ),
+          showingText,
+          controlsRow,
         ],
       ),
     );

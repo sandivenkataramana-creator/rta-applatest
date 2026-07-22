@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color brandTeal = Color(0xFF0B7166);
-  static const Color brandTealDark = Color(0xFF084F47);
+  static const Color brandTeal = Color(0xFF0D9488);
+  static const Color brandTealDark = Color(0xFF031A1C);
+  static const Color brandCyanAccent = Color(0xFF00F5D4);
   static const Color brandGold = Color(0xFFF2B33D);
   static const Color surfaceLight = Color(0xFFF3F7F6);
 
@@ -10,14 +11,14 @@ class AppTheme {
     seedColor: brandTeal,
     brightness: Brightness.light,
     primary: brandTeal,
-    secondary: const Color(0xFF00A49F),
+    secondary: brandCyanAccent,
   ).copyWith(surface: surfaceLight, onSurface: Colors.black87);
 
   static final ThemeData lightTheme = ThemeData(
     colorScheme: _lightScheme,
     useMaterial3: true,
     scaffoldBackgroundColor: _lightScheme.surface,
-    appBarTheme: AppBarTheme(
+    appBarTheme: const AppBarTheme(
       backgroundColor: brandTeal,
       foregroundColor: Colors.white,
       elevation: 0,
