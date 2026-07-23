@@ -94,16 +94,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         'assets/images/app_icon.png',
                         height: 90,
                         width: 90,
-                        errorBuilder: (context, error, stackTrace) => Image.asset(
-                          'assets/images/telangana_logo.png',
-                          height: 90,
-                          width: 90,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                            Icons.directions_car_filled_outlined,
-                            size: 70,
-                            color: Color(0xFF00F5D4),
-                          ),
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.directions_car_filled_outlined,
+                          size: 70,
+                          color: Color(0xFF00F5D4),
                         ),
                       ),
                     ),

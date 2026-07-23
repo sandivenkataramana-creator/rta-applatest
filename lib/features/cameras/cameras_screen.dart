@@ -56,12 +56,16 @@ class CamerasScreen extends ConsumerWidget {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    camera.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: Text(
+                                      camera.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Chip(
                                     label: Text(camera.status),
                                     backgroundColor: online
@@ -75,13 +79,14 @@ class CamerasScreen extends ConsumerWidget {
                               Text('Health: ${camera.health}%'),
                               Text('Last Active: ${camera.lastActive}'),
                               const Spacer(),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
                                 children: [
                                   FilledButton(
                                     onPressed: () {},
                                     child: const Text('View Details'),
                                   ),
-                                  const SizedBox(width: 10),
                                   OutlinedButton(
                                     onPressed: () {},
                                     child: Text(online ? 'Disable' : 'Enable'),

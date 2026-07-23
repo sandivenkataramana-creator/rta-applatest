@@ -215,30 +215,34 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(color: const Color(0xFF0F3260), borderRadius: BorderRadius.circular(6)),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              child: Text(vehicleNumber, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: typeLabel == 'TRANSPORT' ? const Color(0xFFDCFCE7) : const Color(0xFFDBEAFE),
-                                borderRadius: BorderRadius.circular(6),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(color: const Color(0xFF0F3260), borderRadius: BorderRadius.circular(6)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                child: Text(vehicleNumber, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              child: Text(
-                                typeLabel,
-                                style: TextStyle(
-                                  color: typeLabel == 'TRANSPORT' ? const Color(0xFF166534) : const Color(0xFF1E40AF),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: typeLabel == 'TRANSPORT' ? const Color(0xFFDCFCE7) : const Color(0xFFDBEAFE),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                child: Text(
+                                  typeLabel,
+                                  style: TextStyle(
+                                    color: typeLabel == 'TRANSPORT' ? const Color(0xFF166534) : const Color(0xFF1E40AF),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
                       ],

@@ -248,7 +248,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text(
-                                              'VIEAS',
+                                              'TGRTA',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 20,
@@ -258,10 +258,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                               ),
                                             ),
                                             Text(
-                                              'TELANGANA',
+                                              'ANPR SYSTEM',
                                               style: TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 15,
+                                                fontSize: 14,
                                                 fontWeight: FontWeight.w300,
                                                 fontStyle: FontStyle.italic,
                                                 height: 1.1,
@@ -304,9 +304,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Expanded(
                   child: Center(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: MediaQuery.of(context).size.width < 500 ? 12 : 24,
+                        vertical: 16,
+                      ),
                       child: Container(
                         width: 460,
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width - (MediaQuery.of(context).size.width < 500 ? 24 : 48),
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xF0082123), // Dark cyan/emerald glass tint
                           borderRadius: BorderRadius.circular(24),
@@ -328,9 +334,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ],
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 32,
-                            horizontal: 36,
+                          padding: EdgeInsets.symmetric(
+                            vertical: MediaQuery.of(context).size.width < 500 ? 24 : 32,
+                            horizontal: MediaQuery.of(context).size.width < 500 ? 18 : 36,
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -503,40 +509,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Theme(
-                                              data: Theme.of(context).copyWith(
-                                                unselectedWidgetColor: Colors.white,
-                                              ),
-                                              child: SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child: Checkbox(
-                                                  value: _rememberMe,
-                                                  activeColor: const Color(0xFF0D9488),
-                                                  checkColor: Colors.white,
-                                                  side: const BorderSide(color: Colors.white, width: 1.5),
-                                                  onChanged: (value) => setState(
-                                                    () => _rememberMe = value ?? true,
-                                                  ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(4),
+                                        Flexible(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Theme(
+                                                data: Theme.of(context).copyWith(
+                                                  unselectedWidgetColor: Colors.white,
+                                                ),
+                                                child: SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child: Checkbox(
+                                                    value: _rememberMe,
+                                                    activeColor: const Color(0xFF0D9488),
+                                                    checkColor: Colors.white,
+                                                    side: const BorderSide(color: Colors.white, width: 1.5),
+                                                    onChanged: (value) => setState(
+                                                      () => _rememberMe = value ?? true,
+                                                    ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            const Text(
-                                              'Remember Me',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 13,
+                                              const SizedBox(width: 8),
+                                              const Flexible(
+                                                child: Text(
+                                                  'Remember Me',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 13,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
+                                        const SizedBox(width: 8),
                                         TextButton(
                                           onPressed: () {},
                                           style: TextButton.styleFrom(
@@ -588,14 +600,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 20),
-                                    const Center(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
+                                    Center(
+                                      child: Wrap(
+                                        alignment: WrapAlignment.center,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: const [
                                           Icon(Icons.gpp_good_outlined, color: Color(0xFF81D8B7), size: 14),
                                           SizedBox(width: 6),
                                           Text(
                                             'Secure Access • Authorized Personnel Only',
+                                            textAlign: TextAlign.center,
                                             style: TextStyle(
                                               color: Colors.white70,
                                               fontSize: 11,
@@ -606,13 +620,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     Center(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
+                                      child: Wrap(
+                                        alignment: WrapAlignment.center,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: const [
                                           Icon(Icons.lock_outline, color: Colors.white60, size: 12),
-                                          const SizedBox(width: 6),
-                                          const Text(
+                                          SizedBox(width: 6),
+                                          Text(
                                             '© 2026 Government of Telangana. All rights reserved.',
+                                            textAlign: TextAlign.center,
                                             style: TextStyle(
                                               color: Colors.white60,
                                               fontSize: 10,

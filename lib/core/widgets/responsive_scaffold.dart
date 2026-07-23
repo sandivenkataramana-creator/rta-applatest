@@ -302,7 +302,7 @@ class _PortalDrawer extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'VIAES',
+                      'TGRTA',
                       style: TextStyle(
                         color: Color(0xFF0D9488),
                         fontSize: 14,
@@ -311,7 +311,7 @@ class _PortalDrawer extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      'TELANGANA',
+                      'ANPR PORTAL',
                       style: TextStyle(
                         color: Color(0xFF0F5D55),
                         fontSize: 10,
