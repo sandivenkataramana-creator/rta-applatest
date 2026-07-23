@@ -37,10 +37,10 @@ class CamerasScreen extends ConsumerWidget {
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: MediaQuery.of(context).size.width > 1000
                           ? 3
-                          : 1,
+                          : (MediaQuery.of(context).size.width > 600 ? 2 : 1),
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
-                      childAspectRatio: 2.2,
+                      childAspectRatio: MediaQuery.of(context).size.width < 360 ? 1.6 : 2.1,
                     ),
                     itemCount: cameras.length,
                     itemBuilder: (context, index) {

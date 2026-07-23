@@ -547,7 +547,10 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                    ),
-                                                   child: const Text('View', maxLines: 1, style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                                   child: const FittedBox(
+                                                     fit: BoxFit.scaleDown,
+                                                     child: Text('View', maxLines: 1, style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                                   ),
                                                  ),
                                                ),
                                              ),

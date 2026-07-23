@@ -616,14 +616,14 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                       color: Colors.grey.shade100,
                                                       borderRadius: BorderRadius.circular(4),
                                                     ),
-                                                    child: Text(
-                                                      cameraID,
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Colors.grey.shade700,
-                                                      ),
-                                                    ),
+                                                     child: Text(
+                                                       cameraID,
+                                                       style: TextStyle(
+                                                         fontSize: 11,
+                                                         fontWeight: FontWeight.bold,
+                                                         color: Colors.grey.shade700,
+                                                       ),
+                                                     ),
                                                   ),
                                                   Text(
                                                     cameraName,
@@ -1315,12 +1315,16 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -1854,13 +1858,16 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                     ),
                                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                   ),
-                                                  child: const Text(
-                                                    'View',
-                                                    maxLines: 1,
-                                                    style: TextStyle(
-                                                      color: Color(0xFF0D9488),
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 12.5,
+                                                  child: const FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    child: Text(
+                                                      'View',
+                                                      maxLines: 1,
+                                                      style: TextStyle(
+                                                        color: Color(0xFF0D9488),
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 12.5,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -2247,7 +2254,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                     ),
                                   ),
                                   const Expanded(
-                                    flex: 1,
+                                    flex: 2,
                                     child: SizedBox(),
                                   ),
                                 ],
@@ -2394,24 +2401,29 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                             ),
                                             // View button
                                             Expanded(
-                                              flex: 1,
+                                              flex: 2,
                                               child: Align(
                                                 alignment: Alignment.centerRight,
                                                 child: OutlinedButton(
                                                   onPressed: () => _showDetailsDialog(context, item, state),
                                                   style: OutlinedButton.styleFrom(
                                                     side: const BorderSide(color: Color(0xFF3B82F6)),
+                                                    minimumSize: const Size(60, 30),
                                                     shape: RoundedRectangleBorder(
                                                       borderRadius: BorderRadius.circular(4),
                                                     ),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                   ),
-                                                  child: const Text(
-                                                    'View',
-                                                    style: TextStyle(
-                                                      color: Color(0xFF3B82F6),
-                                                      fontWeight: FontWeight.w600,
-                                                      fontSize: 12,
+                                                  child: const FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    child: Text(
+                                                      'View',
+                                                      maxLines: 1,
+                                                      style: TextStyle(
+                                                        color: Color(0xFF3B82F6),
+                                                        fontWeight: FontWeight.w600,
+                                                        fontSize: 12,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -2445,73 +2457,137 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     final startItem = totalItems > 0 ? ((_currentPage - 1) * itemsPerPage) + 1 : 0;
     final endItem = (_currentPage * itemsPerPage) > totalItems ? totalItems : (_currentPage * itemsPerPage);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Previous Button
-          TextButton(
-            onPressed: _currentPage > 1
-                ? () => setState(() => _currentPage--)
-                : null,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.chevron_left, size: 18, color: _currentPage > 1 ? Colors.black87 : Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  'Previous',
-                  style: TextStyle(color: _currentPage > 1 ? Colors.black87 : Colors.grey),
-                ),
-              ],
-            ),
-          ),
+    final bool isMobile = MediaQuery.of(context).size.width < 750;
 
-          // Center: Page X of Y + Showing info
-          Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F3260),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'Page $_currentPage of $totalPages',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: isMobile
+            ? Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F3260),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Page $_currentPage of $totalPages',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Showing $startItem - $endItem of $totalItems total records',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: _currentPage > 1
+                            ? () => setState(() => _currentPage--)
+                            : null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chevron_left, size: 18, color: _currentPage > 1 ? Colors.black87 : Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Previous',
+                              style: TextStyle(color: _currentPage > 1 ? Colors.black87 : Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      TextButton(
+                        onPressed: _currentPage < totalPages
+                            ? () => setState(() => _currentPage++)
+                            : null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Next',
+                              style: TextStyle(color: _currentPage < totalPages ? Colors.black87 : Colors.grey),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.chevron_right, size: 18, color: _currentPage < totalPages ? Colors.black87 : Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: _currentPage > 1
+                        ? () => setState(() => _currentPage--)
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.chevron_left, size: 18, color: _currentPage > 1 ? Colors.black87 : Colors.grey),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Previous',
+                          style: TextStyle(color: _currentPage > 1 ? Colors.black87 : Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F3260),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Page $_currentPage of $totalPages',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Showing $startItem - $endItem of $totalItems total records',
+                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed: _currentPage < totalPages
+                        ? () => setState(() => _currentPage++)
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Next',
+                          style: TextStyle(color: _currentPage < totalPages ? Colors.black87 : Colors.grey),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.chevron_right, size: 18, color: _currentPage < totalPages ? Colors.black87 : Colors.grey),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Showing $startItem - $endItem of $totalItems total records',
-                style: const TextStyle(fontSize: 11, color: Colors.black54),
-              ),
-            ],
-          ),
-
-          // Next Button
-          TextButton(
-            onPressed: _currentPage < totalPages
-                ? () => setState(() => _currentPage++)
-                : null,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Next',
-                  style: TextStyle(color: _currentPage < totalPages ? Colors.black87 : Colors.grey),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 18, color: _currentPage < totalPages ? Colors.black87 : Colors.grey),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

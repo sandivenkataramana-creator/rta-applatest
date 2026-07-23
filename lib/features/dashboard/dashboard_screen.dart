@@ -460,7 +460,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         crossAxisSpacing: 16,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        childAspectRatio: isDesktop ? 0.65 : (screenWidth >= 768 ? 0.85 : 2.4),
+                        childAspectRatio: isDesktop ? 0.65 : (screenWidth >= 768 ? 0.85 : 1.75),
                         children: _getSummaryMetrics(state.offenceData)
                             .map((metric) => _buildComplianceCard(metric))
                             .toList(),
@@ -1071,8 +1071,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final isMobileLayout = MediaQuery.of(context).size.width < 750;
 
     final chartWidget = SizedBox(
-      width: isMobileLayout ? 100 : double.infinity,
-      height: isMobileLayout ? 100 : double.infinity,
+      width: isMobileLayout ? 80 : double.infinity,
+      height: isMobileLayout ? 80 : double.infinity,
       child: SfCircularChart(
         margin: EdgeInsets.zero,
         series: <DoughnutSeries<_ChartData, String>>[

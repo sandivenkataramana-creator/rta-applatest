@@ -1293,7 +1293,10 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                            ),
-                                                           child: const Text('View', maxLines: 1, style: TextStyle(color: Color(0xFF3B82F6), fontWeight: FontWeight.w600, fontSize: 12)),
+                                                           child: const FittedBox(
+                                                             fit: BoxFit.scaleDown,
+                                                             child: Text('View', maxLines: 1, style: TextStyle(color: Color(0xFF3B82F6), fontWeight: FontWeight.w600, fontSize: 12)),
+                                                           ),
                                                          ),
                                                        ),
                                                      ),
