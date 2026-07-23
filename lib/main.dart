@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:device_preview/device_preview.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,7 +24,14 @@ Future<void> main() async {
   HttpOverrides.global = MyHttpOverrides();
   await Hive.initFlutter();
   await NotificationService.initialize();
-  runApp(const ProviderScope(child: RtaApp()));
+  runApp(
+  DevicePreview(
+    enabled: !kReleaseMode,
+    builder: (context) => const ProviderScope(
+      child: RtaApp(),
+    ),
+  ),
+);
 }
 
 class RtaApp extends ConsumerWidget {
@@ -34,6 +43,8 @@ class RtaApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
+      locale: DevicePreview.locale(context),
+      builder: DevicePreview.appBuilder,
       title: 'Telangana Transport ANPR Portal',
       debugShowCheckedModeBanner: false,
       routerConfig: router,

@@ -2151,29 +2151,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   // 3. Total Value
                   Expanded(
                     flex: 4,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          NumberFormat.decimalPattern().format(total),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F3260),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            NumberFormat.decimalPattern().format(total),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F3260),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 2),
-                        const Text(
-                          'Total',
-                          style: TextStyle(
-                            fontSize: 8,
-                            color: Colors.black45,
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(width: 2),
+                          const Text(
+                            'Total',
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: Colors.black45,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                   // 4. Vertical Divider
@@ -2262,25 +2266,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            NumberFormat.decimalPattern().format(value),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              NumberFormat.decimalPattern().format(value),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 7.0,
-              color: Colors.black45,
-              fontWeight: FontWeight.w500,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 7.0,
+                color: Colors.black45,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
