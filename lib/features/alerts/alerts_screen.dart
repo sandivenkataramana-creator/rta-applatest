@@ -536,20 +536,21 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                                               ),
                                             ),
                                             Expanded(
-                                              flex: 1,
-                                              child: Align(
-                                                alignment: Alignment.centerRight,
-                                                child: OutlinedButton(
-                                                  onPressed: () => _showDetailsDialog(context, item),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: Color(0xFF0D9488)),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                                  ),
-                                                  child: const Text('View', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold, fontSize: 13)),
-                                                ),
-                                              ),
-                                            ),
+                                               flex: 2,
+                                               child: Align(
+                                                 alignment: Alignment.centerRight,
+                                                 child: OutlinedButton(
+                                                   onPressed: () => _showDetailsDialog(context, item),
+                                                   style: OutlinedButton.styleFrom(
+                                                     side: const BorderSide(color: Color(0xFF0D9488)),
+                                                     minimumSize: const Size(60, 30),
+                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                   ),
+                                                   child: const Text('View', maxLines: 1, style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                                 ),
+                                               ),
+                                             ),
                                           ],
                                         ),
                                       );

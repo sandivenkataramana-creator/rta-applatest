@@ -875,6 +875,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required IconData icon,
     required Gradient gradient,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isVerySmall = screenWidth < 360;
+
     return Container(
       decoration: BoxDecoration(
         gradient: gradient,
@@ -887,12 +890,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isVerySmall ? 10 : 16,
+        vertical: isVerySmall ? 10 : 14,
+      ),
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: isVerySmall ? 40 : 48,
+            height: isVerySmall ? 40 : 48,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(12),
@@ -904,32 +910,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: Icon(
               icon,
               color: Colors.white,
-              size: 26,
+              size: isVerySmall ? 20 : 24,
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isVerySmall ? 10 : 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    height: 1.1,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.1,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 9,
                     color: Colors.white.withValues(alpha: 0.8),
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.6,
                   ),
                 ),
               ],
@@ -1249,19 +1261,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Colors.black54,
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: Colors.black54,
+            ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: 4),
         Text(
           NumberFormat.decimalPattern().format(value),
           style: const TextStyle(
-            fontSize: 12,
+            fontSize: 10.5,
             fontWeight: FontWeight.bold,
             color: Colors.black87,
           ),

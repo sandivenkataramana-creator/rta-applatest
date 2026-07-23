@@ -1282,20 +1282,21 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                                                       child: Text(statusText, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
                                                     ),
                                                     Expanded(
-                                                      flex: 1,
-                                                      child: Align(
-                                                        alignment: Alignment.centerRight,
-                                                        child: OutlinedButton(
-                                                          onPressed: () => _showDetailsDialog(context, item, state.offenceConfigs),
-                                                          style: OutlinedButton.styleFrom(
-                                                            side: const BorderSide(color: Color(0xFF3B82F6)),
-                                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                                          ),
-                                                          child: const Text('View', style: TextStyle(color: Color(0xFF3B82F6), fontWeight: FontWeight.w600, fontSize: 12)),
-                                                        ),
-                                                      ),
-                                                    ),
+                                                       flex: 2,
+                                                       child: Align(
+                                                         alignment: Alignment.centerRight,
+                                                         child: OutlinedButton(
+                                                           onPressed: () => _showDetailsDialog(context, item, state.offenceConfigs),
+                                                           style: OutlinedButton.styleFrom(
+                                                             side: const BorderSide(color: Color(0xFF3B82F6)),
+                                                             minimumSize: const Size(60, 30),
+                                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                           ),
+                                                           child: const Text('View', maxLines: 1, style: TextStyle(color: Color(0xFF3B82F6), fontWeight: FontWeight.w600, fontSize: 12)),
+                                                         ),
+                                                       ),
+                                                     ),
                                                   ],
                                                 ),
                                               );
@@ -1383,26 +1384,51 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('Showing $startItem-$endItem of $totalItems records', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-          Row(
-            children: [
-              TextButton(
-                onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
-                child: const Text('‹', style: TextStyle(fontSize: 18, color: Colors.black54)),
+    final bool isMobile = MediaQuery.of(context).size.width < 750;
+    final showingText = Text(
+      'Showing $startItem-$endItem of $totalItems records',
+      style: const TextStyle(fontSize: 12, color: Colors.black54),
+      textAlign: isMobile ? TextAlign.center : TextAlign.left,
+    );
+
+    final controlsRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton(
+          onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+          child: const Text('‹', style: TextStyle(fontSize: 18, color: Colors.black54)),
+        ),
+        ...pageButtons,
+        TextButton(
+          onPressed: _currentPage < totalPages ? () => setState(() => _currentPage++) : null,
+          child: const Text('›', style: TextStyle(fontSize: 18, color: Colors.black54)),
+        ),
+      ],
+    );
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: isMobile
+            ? Column(
+                children: [
+                  showingText,
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: controlsRow,
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  showingText,
+                  controlsRow,
+                ],
               ),
-              ...pageButtons,
-              TextButton(
-                onPressed: _currentPage < totalPages ? () => setState(() => _currentPage++) : null,
-                child: const Text('›', style: TextStyle(fontSize: 18, color: Colors.black54)),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

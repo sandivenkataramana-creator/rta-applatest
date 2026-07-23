@@ -1841,24 +1841,26 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                               ),
                                             ),
                                             Expanded(
-                                              flex: 1,
+                                              flex: 2,
                                               child: Align(
                                                 alignment: Alignment.centerRight,
                                                 child: OutlinedButton(
                                                   onPressed: () => _showDetailsDialog(context, item, state),
                                                   style: OutlinedButton.styleFrom(
                                                     side: const BorderSide(color: Color(0xFF0D9488)),
+                                                    minimumSize: const Size(60, 30),
                                                     shape: RoundedRectangleBorder(
                                                       borderRadius: BorderRadius.circular(4),
                                                     ),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                   ),
                                                   child: const Text(
                                                     'View',
+                                                    maxLines: 1,
                                                     style: TextStyle(
                                                       color: Color(0xFF0D9488),
                                                       fontWeight: FontWeight.bold,
-                                                      fontSize: 13,
+                                                      fontSize: 12.5,
                                                     ),
                                                   ),
                                                 ),
@@ -2581,11 +2583,18 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: children,
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: children,
+          ),
+        ),
       ),
     );
   }
