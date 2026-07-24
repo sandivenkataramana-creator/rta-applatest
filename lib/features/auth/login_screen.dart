@@ -235,7 +235,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       children: [
                                         Image.asset(
                                           'assets/images/telangana_logo.png',
-                                          height: 40,
+                                          height: 52,
                                           errorBuilder: (context, error, stackTrace) => const Icon(
                                             Icons.account_balance,
                                             color: Colors.white,
@@ -570,7 +570,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     const SizedBox(height: 28),
                                     SizedBox(
                                       width: double.infinity,
-                                      height: 48,
+                                      height: 52,
                                       child: ElevatedButton(
                                         onPressed: _login,
                                         style: ElevatedButton.styleFrom(
@@ -587,6 +587,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           children: [
                                             Text(
                                               'Login',
+                                              strutStyle: StrutStyle(
+                                                fontSize: 16,
+                                                height: 1.3,
+                                                forceStrutHeight: true,
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,

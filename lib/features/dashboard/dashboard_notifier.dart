@@ -29,8 +29,8 @@ class DashboardState {
     this.offenceTypes = const [],
     this.isLoading = false,
     this.error,
-    this.eChallan = '2',
-    this.manualChallan = '2',
+    this.eChallan = '0',
+    this.manualChallan = '0',
     this.seizedVehicles = '0',
     this.monthlyRevenue = const {},
   });

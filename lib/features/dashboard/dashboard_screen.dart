@@ -1559,7 +1559,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  trend: '↑ 12.5% vs Yesterday',
+                  trend: (int.tryParse(state.eChallan) ?? 0) > 0 ? '↑ Active Fines' : '— No Change',
                 ),
                 const SizedBox(width: 12),
                 _buildOverviewStatCard(
@@ -1571,7 +1571,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  trend: '— No Change',
+                  trend: (int.tryParse(state.manualChallan) ?? 0) > 0 ? '↑ Collected Fines' : '— No Change',
                 ),
                 const SizedBox(width: 12),
                 _buildOverviewStatCard(
@@ -1583,7 +1583,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  trend: '— No Change',
+                  trend: (int.tryParse(state.seizedVehicles) ?? 0) > 0 ? '↑ Seized Vehicles' : '— No Change',
                 ),
               ],
             ),
@@ -2058,12 +2058,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             color: Colors.white.withValues(alpha: 0.15),
           ),
           const SizedBox(height: 6),
-          Text(
-            trend,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              trend,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
             ),
           ),
         ],

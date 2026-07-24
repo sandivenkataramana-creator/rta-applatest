@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 
 final Set<String> _registeredViewTypes = {};
 
-Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit? fit}) {
-  final String viewType = 'img-${src.hashCode}';
+Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit? fit, VoidCallback? onTap}) {
+  final bool hasTap = onTap != null;
+  final String viewType = 'img-${src.hashCode}-${hasTap ? 'tap' : 'notap'}';
   
   if (!_registeredViewTypes.contains(viewType)) {
     _registeredViewTypes.add(viewType);
@@ -15,14 +16,38 @@ Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit?
         ..src = src
         ..style.width = '100%'
         ..style.height = '100%'
-        ..style.objectFit = (fit == BoxFit.cover) ? 'cover' : 'contain';
+        ..style.objectFit = (fit == BoxFit.cover) ? 'cover' : 'contain'
+        ..style.cursor = hasTap ? 'pointer' : 'default';
+      
+      if (hasTap) {
+        imgElement.style.pointerEvents = 'auto';
+        imgElement.onClick.listen((event) {
+          event.stopPropagation();
+          onTap();
+        });
+      } else {
+        imgElement.style.pointerEvents = 'none';
+      }
       return imgElement;
     });
   }
   
-  return SizedBox(
+  final childWidget = SizedBox(
     width: width,
     height: height,
     child: HtmlElementView(viewType: viewType),
   );
+
+  if (hasTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: childWidget,
+      ),
+    );
+  }
+
+  return childWidget;
 }

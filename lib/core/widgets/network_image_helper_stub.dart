@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit? fit}) {
-  return Image.network(
+Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit? fit, VoidCallback? onTap}) {
+  final img = Image.network(
     src,
     width: width,
     height: height,
@@ -13,4 +13,17 @@ Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit?
       child: const Icon(Icons.directions_car, color: Colors.grey, size: 36),
     ),
   );
+
+  if (onTap != null) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: img,
+      ),
+    );
+  }
+
+  return img;
 }

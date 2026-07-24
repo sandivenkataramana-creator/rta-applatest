@@ -297,30 +297,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     super.dispose();
   }
 
-  Widget _buildImage(String? src, {double? width, double? height, BoxFit? fit}) {
-    if (src == null || src.isEmpty) {
-      return Container(
-        width: width,
-        height: height,
-        color: Colors.grey.shade200,
-        child: const Icon(Icons.directions_car, color: Colors.grey, size: 36),
-      );
-    }
-    if (src.startsWith('assets/')) {
-      return Image.asset(
-        src,
-        width: width,
-        height: height,
-        fit: fit ?? BoxFit.cover,
-      );
-    }
-    return buildPlatformNetImage(
-      src,
-      width: width,
-      height: height,
-      fit: fit,
-    );
-  }
 
   String _formatDateTime(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '';
@@ -377,6 +353,220 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         children: spans,
         style: const TextStyle(fontSize: 13, fontFamily: 'Roboto'),
       ),
+    );
+  }
+
+  void _showNotificationHistoryDetailsDialog(BuildContext context, String vehicleNumber) {
+    final historyRecords = [
+      {
+        'id': '2733379',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 24, 2026, 3:55:41 PM',
+        'status': 'GRACE PERIOD',
+      },
+      {
+        'id': '2693131',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 24, 2026, 11:09:29 AM',
+        'status': 'GRACE PERIOD',
+      },
+      {
+        'id': '2266606',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 13, 2026, 5:46:48 PM',
+        'status': 'GRACE PERIOD',
+      },
+      {
+        'id': '2024298',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 6, 2026, 12:56:46 PM',
+        'status': 'GRACE PERIOD',
+      },
+      {
+        'id': '1992201',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 4, 2026, 9:27:40 AM',
+        'status': 'GRACE PERIOD',
+      },
+      {
+        'id': '1878613',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 3, 2026, 9:51:26 AM',
+        'status': 'GRACE PERIOD',
+      },
+      {
+        'id': '1794162',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jul 2, 2026, 1:53:43 PM',
+        'status': 'DUPLICATE',
+      },
+      {
+        'id': '1739122',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '250.00',
+        'dateTime': 'Jul 2, 2026, 7:42:46 AM',
+        'status': 'UNPAID',
+      },
+      {
+        'id': '1450740',
+        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
+        'amount': '0.00',
+        'dateTime': 'Jun 29, 2026, 3:29:01 PM',
+        'status': 'GRACE PERIOD',
+      },
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: 700,
+              maxHeight: 600,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                    border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.format_list_bulleted, size: 18, color: Color(0xFF0F3260)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Notification History Details - $vehicleNumber',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F3260),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20, color: Colors.black54),
+                        onPressed: () => Navigator.of(context).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Table Body
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.vertical,
+                    padding: const EdgeInsets.all(12),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 780),
+                        child: Table(
+                          border: TableBorder.all(color: Colors.grey.shade300, width: 0.8),
+                          columnWidths: const {
+                            0: FlexColumnWidth(1.2), // ID
+                            1: FlexColumnWidth(4.5), // Notification
+                            2: FlexColumnWidth(1.2), // Amount
+                            3: FlexColumnWidth(2.2), // Date & Time
+                            4: FlexColumnWidth(1.8), // Status
+                          },
+                          children: [
+                            // Table Header
+                            const TableRow(
+                              decoration: BoxDecoration(color: Color(0xFF1E3A8A)),
+                              children: [
+                                Padding(padding: EdgeInsets.all(10), child: Text('ID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                Padding(padding: EdgeInsets.all(10), child: Text('Notification', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                Padding(padding: EdgeInsets.all(10), child: Text('Amount', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                Padding(padding: EdgeInsets.all(10), child: Text('Date & Time', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                Padding(padding: EdgeInsets.all(10), child: Text('Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                              ],
+                            ),
+
+                            // Table Data Rows
+                            ...historyRecords.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final record = entry.value;
+                              final status = record['status'] ?? '';
+
+                              Color badgeBg;
+                              Color badgeText;
+                              if (status == 'DUPLICATE') {
+                                badgeBg = const Color(0xFF10B981);
+                                badgeText = Colors.white;
+                              } else if (status == 'UNPAID') {
+                                badgeBg = const Color(0xFFEF4444);
+                                badgeText = Colors.white;
+                              } else {
+                                badgeBg = const Color(0xFFF59E0B);
+                                badgeText = const Color(0xFF78350F);
+                              }
+
+                              return TableRow(
+                                decoration: BoxDecoration(
+                                  color: idx % 2 == 0 ? Colors.white : const Color(0xFFF8FAFC),
+                                ),
+                                children: [
+                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['id']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
+                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['notification']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
+                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['amount']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
+                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['dateTime']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
+                                  Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: badgeBg,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          status,
+                                          style: TextStyle(
+                                            color: badgeText,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -463,8 +653,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            double totalChallanAmount = selectedOffences.fold(0.0, (sum, o) => sum + (o['amount'] as double)) +
-                customOffences.fold(0.0, (sum, o) => sum + (o['amount'] as double));
+            double totalChallanAmount = selectedOffences.fold(0.0, (sum, o) => sum + (o['amount'] as num? ?? 0.0).toDouble());
 
             return Dialog(
               backgroundColor: const Color(0xFFF3F6F6),
@@ -585,7 +774,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                 builder: (context, constraints) {
                                   final isWide = constraints.maxWidth >= 750;
                                   
-                                  // Left side components: Vehicle Image + Owner Information
+    // Left side components: Vehicle Image + Owner Information
                                   final leftColumn = Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
@@ -598,17 +787,10 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.stretch,
                                           children: [
-                                            GestureDetector(
-                                              onTap: () => showZoomedImageDialog(context, imgUrl),
-                                              child: MouseRegion(
-                                                cursor: SystemMouseCursors.click,
-                                                child: _buildImage(imgUrl, height: 260, fit: BoxFit.cover),
-                                              ),
-                                            ),
+                                            _buildVehicleImage(imgUrl, height: 260, fit: BoxFit.cover, onTap: () => showZoomedImageDialog(context, imgUrl)),
                                             Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                               child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                 children: [
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -616,21 +798,26 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                       color: Colors.grey.shade100,
                                                       borderRadius: BorderRadius.circular(4),
                                                     ),
-                                                     child: Text(
-                                                       cameraID,
-                                                       style: TextStyle(
-                                                         fontSize: 11,
-                                                         fontWeight: FontWeight.bold,
-                                                         color: Colors.grey.shade700,
-                                                       ),
-                                                     ),
+                                                    child: Text(
+                                                      cameraID,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.grey.shade700,
+                                                      ),
+                                                    ),
                                                   ),
-                                                  Text(
-                                                    cameraName,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey.shade700,
-                                                      fontWeight: FontWeight.w500,
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      cameraName,
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey.shade700,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                      textAlign: TextAlign.end,
                                                     ),
                                                   ),
                                                 ],
@@ -726,23 +913,51 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                                   ),
                                                                 )
                                                               : ListView(
-                                                                  padding: const EdgeInsets.all(8),
+                                                                  padding: const EdgeInsets.all(6),
                                                                   children: selectedOffences.map((offence) {
-                                                                    return Card(
-                                                                      color: Colors.white,
-                                                                      margin: const EdgeInsets.only(bottom: 8),
-                                                                      child: ListTile(
-                                                                        dense: true,
-                                                                        title: Text(offence['name'] as String, style: const TextStyle(fontSize: 11)),
-                                                                        subtitle: Text('₹ ${(offence['amount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                                                        trailing: IconButton(
-                                                                          icon: const Icon(Icons.close, size: 14, color: Colors.red),
-                                                                          onPressed: () {
-                                                                            setDialogState(() {
-                                                                              selectedOffences.remove(offence);
-                                                                            });
-                                                                          },
-                                                                        ),
+                                                                    final offName = offence['name']?.toString() ?? '';
+                                                                    final offAmt = offence['amount'] as num? ?? 0.0;
+                                                                    return Container(
+                                                                      margin: const EdgeInsets.only(bottom: 6),
+                                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                                      decoration: BoxDecoration(
+                                                                        color: Colors.white,
+                                                                        borderRadius: BorderRadius.circular(6),
+                                                                        border: Border.all(color: Colors.grey.shade300),
+                                                                      ),
+                                                                      child: Row(
+                                                                        children: [
+                                                                          Expanded(
+                                                                            child: Column(
+                                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                                              mainAxisSize: MainAxisSize.min,
+                                                                              children: [
+                                                                                Text(
+                                                                                  offName,
+                                                                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F3260)),
+                                                                                  maxLines: 2,
+                                                                                  overflow: TextOverflow.ellipsis,
+                                                                                ),
+                                                                                const SizedBox(height: 2),
+                                                                                Text(
+                                                                                  '₹ ${offAmt.toStringAsFixed(2)}',
+                                                                                  style: const TextStyle(fontSize: 10.5, color: Color(0xFF0D9488), fontWeight: FontWeight.bold),
+                                                                                ),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                          InkWell(
+                                                                            onTap: () {
+                                                                              setDialogState(() {
+                                                                                selectedOffences.remove(offence);
+                                                                              });
+                                                                            },
+                                                                            child: const Padding(
+                                                                              padding: EdgeInsets.all(4),
+                                                                              child: Icon(Icons.close, size: 16, color: Colors.red),
+                                                                            ),
+                                                                          ),
+                                                                        ],
                                                                       ),
                                                                     );
                                                                   }).toList(),
@@ -769,29 +984,66 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                             borderRadius: BorderRadius.circular(6),
                                                           ),
                                                           child: ListView.separated(
-                                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                                            padding: const EdgeInsets.all(6),
                                                             itemCount: availableOffences.length,
-                                                            separatorBuilder: (context, index) => const Divider(height: 1),
+                                                            separatorBuilder: (context, index) => const SizedBox(height: 6),
                                                             itemBuilder: (context, index) {
                                                               final off = availableOffences[index];
                                                               final bool isAlreadySelected = selectedOffences.any((element) => element['name'] == off['name']);
-                                                              return ListTile(
-                                                                dense: true,
-                                                                onTap: isAlreadySelected ? null : () {
-                                                                  setDialogState(() {
-                                                                    selectedOffences.add(off);
-                                                                  });
-                                                                },
-                                                                leading: Icon(
-                                                                  Icons.arrow_back,
-                                                                  size: 14,
-                                                                  color: isAlreadySelected ? Colors.grey : const Color(0xFF0F3260),
-                                                                ),
-                                                                title: Text(
-                                                                  '${off['name']} (₹ ${off['amount']})',
-                                                                  style: TextStyle(
-                                                                    fontSize: 11,
-                                                                    color: isAlreadySelected ? Colors.grey : Colors.black87,
+                                                              final offName = off['name']?.toString() ?? '';
+                                                              final offAmt = off['amount'] as num? ?? 0.0;
+
+                                                              return InkWell(
+                                                                onTap: isAlreadySelected
+                                                                    ? null
+                                                                    : () {
+                                                                        setDialogState(() {
+                                                                          selectedOffences.add(off);
+                                                                        });
+                                                                      },
+                                                                child: Container(
+                                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                                  decoration: BoxDecoration(
+                                                                    color: isAlreadySelected ? Colors.grey.shade100 : Colors.white,
+                                                                    borderRadius: BorderRadius.circular(6),
+                                                                    border: Border.all(color: Colors.grey.shade300),
+                                                                  ),
+                                                                  child: Row(
+                                                                    children: [
+                                                                      Icon(
+                                                                        Icons.arrow_back,
+                                                                        size: 14,
+                                                                        color: isAlreadySelected ? Colors.grey : const Color(0xFF0F3260),
+                                                                      ),
+                                                                      const SizedBox(width: 6),
+                                                                      Expanded(
+                                                                        child: Column(
+                                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                                          mainAxisSize: MainAxisSize.min,
+                                                                          children: [
+                                                                            Text(
+                                                                              offName,
+                                                                              style: TextStyle(
+                                                                                fontSize: 11,
+                                                                                fontWeight: FontWeight.bold,
+                                                                                color: isAlreadySelected ? Colors.grey : Colors.black87,
+                                                                              ),
+                                                                              maxLines: 2,
+                                                                              overflow: TextOverflow.ellipsis,
+                                                                            ),
+                                                                            const SizedBox(height: 2),
+                                                                            Text(
+                                                                              '₹ ${offAmt.toStringAsFixed(2)}',
+                                                                              style: TextStyle(
+                                                                                fontSize: 10.5,
+                                                                                color: isAlreadySelected ? Colors.grey : const Color(0xFF0D9488),
+                                                                                fontWeight: FontWeight.bold,
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 ),
                                                               );
@@ -906,14 +1158,14 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                 padding: const EdgeInsets.all(4),
                                                 child: Center(
                                                   child: OutlinedButton(
-                                                    onPressed: () {},
+                                                    onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber),
                                                     style: OutlinedButton.styleFrom(
                                                       side: const BorderSide(color: Color(0xFF0D9488)),
                                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                                     ),
                                                     child: const Text(
-                                                      'View Details',
+                                                      'View',
                                                       style: TextStyle(color: Color(0xFF0D9488), fontSize: 11, fontWeight: FontWeight.bold),
                                                     ),
                                                   ),
@@ -963,13 +1215,24 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                           final addButton = ElevatedButton(
                                             onPressed: () {
                                               final name = customNameCtrl.text.trim();
-                                              final amt = double.tryParse(customAmountCtrl.text);
-                                              if (name.isNotEmpty && amt != null) {
+                                              final amtText = customAmountCtrl.text.trim();
+                                              final amt = double.tryParse(amtText) ?? 0.0;
+                                              if (name.isNotEmpty) {
                                                 setDialogState(() {
-                                                  customOffences.add({'name': name, 'amount': amt});
+                                                  final newOffence = <String, dynamic>{'name': name, 'amount': amt};
+                                                  customOffences.add(newOffence);
+                                                  selectedOffences.add(newOffence);
                                                   customNameCtrl.clear();
                                                   customAmountCtrl.clear();
                                                 });
+                                              } else {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text('Please enter an offence name before adding'),
+                                                    backgroundColor: Colors.orange,
+                                                    duration: Duration(seconds: 2),
+                                                  ),
+                                                );
                                               }
                                             },
                                             style: ElevatedButton.styleFrom(
@@ -1022,12 +1285,13 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                               child: Row(
                                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                 children: [
-                                                  Text('${custom['name']} (₹ ${custom['amount']})', style: const TextStyle(fontSize: 12)),
+                                                  Text('${custom['name']} (₹ ${(custom['amount'] as num).toStringAsFixed(2)})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
                                                   IconButton(
                                                     icon: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 20),
                                                     onPressed: () {
                                                       setDialogState(() {
-                                                        customOffences.removeAt(idx);
+                                                        final removed = customOffences.removeAt(idx);
+                                                        selectedOffences.removeWhere((item) => item['name'] == removed['name']);
                                                       });
                                                     },
                                                   ),
@@ -1145,7 +1409,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               child: const Text('Close', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () {},
+                              onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber),
                               icon: const Icon(Icons.description, size: 16, color: Colors.black87),
                               label: const Text('Previous VCR Reports', style: TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold)),
                               style: OutlinedButton.styleFrom(
@@ -1209,6 +1473,36 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         );
       },
     );
+  }
+
+  Widget _buildVehicleImage(String imgUrl, {double? height, BoxFit fit = BoxFit.cover, VoidCallback? onTap}) {
+    final clean = imgUrl.trim();
+    if (clean.isEmpty) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: height ?? 200,
+          color: const Color(0xFF0F3260),
+          child: const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.directions_car, size: 48, color: Colors.white70),
+                SizedBox(height: 8),
+                Text('Telangana ANPR Capture', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (clean.startsWith('assets/')) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Image.asset(clean, height: height, fit: fit),
+      );
+    }
+    return buildPlatformNetImage(clean, height: height, fit: fit, onTap: onTap);
   }
 
   Widget _buildTableCell(String text, {bool isHeader = false}) {
