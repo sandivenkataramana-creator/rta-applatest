@@ -43,6 +43,7 @@ class VehicleMonitoringState {
     this.cameras = const ['Select All Camera'],
     this.cameraLocationToId = const {},
     this.offenceTypes = const [],
+    this.offenceConfigs = const [],
   });
 
   final List<VehicleDetection> detections;
@@ -65,6 +66,7 @@ class VehicleMonitoringState {
   final List<String> cameras;
   final Map<String, String> cameraLocationToId;
   final List<String> offenceTypes;
+  final List<Map<String, dynamic>> offenceConfigs;
 
   VehicleMonitoringState copyWith({
     List<VehicleDetection>? detections,
@@ -85,6 +87,7 @@ class VehicleMonitoringState {
     List<String>? cameras,
     Map<String, String>? cameraLocationToId,
     List<String>? offenceTypes,
+    List<Map<String, dynamic>>? offenceConfigs,
   }) {
     return VehicleMonitoringState(
       detections: detections ?? this.detections,
@@ -105,6 +108,7 @@ class VehicleMonitoringState {
       cameras: cameras ?? this.cameras,
       cameraLocationToId: cameraLocationToId ?? this.cameraLocationToId,
       offenceTypes: offenceTypes ?? this.offenceTypes,
+      offenceConfigs: offenceConfigs ?? this.offenceConfigs,
     );
   }
 }
@@ -133,7 +137,14 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
   Future<void> fetchViolations() async {
     state = state.copyWith(isLoading: true);
     try {
-      final results = await repository.fetchViolations();
+      final selectedCamId = state.cameraLocationToId[state.selectedCamera] ?? state.selectedCamera;
+      final results = await repository.fetchViolations(
+        violationType: state.selectedViolationType,
+        districtName: state.selectedDistrict,
+        zoneName: state.selectedZone,
+        cameraId: selectedCamId,
+        vehicleType: state.selectedVehicleType,
+      );
       state = state.copyWith(violations: results, isLoading: false);
     } catch (error) {
       state = state.copyWith(error: error.toString(), isLoading: false);
@@ -153,10 +164,16 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
   Future<void> loadInitialFilters() async {
     try {
       final distList = await repository.fetchDistricts();
-      final offenceList = await repository.fetchOffenceTypes();
+      final configs = await repository.fetchOffenceConfigs();
+      final offenceList = configs
+          .map((item) => item['offence']?.toString())
+          .whereType<String>()
+          .toList();
+
       state = state.copyWith(
         districts: distList,
         offenceTypes: offenceList,
+        offenceConfigs: configs,
       );
     } catch (e) {
       debugPrint('Error loading initial filters: $e');
@@ -234,6 +251,7 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
       selectedVehicleType: vehicleType,
       selectedViolationType: violationType,
     );
+    fetchViolations();
   }
 
   void updateSearch(String value) {
@@ -578,29 +596,40 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     final cameraName = vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A';
     final cameraID = vehicle['cameraID']?.toString() ?? '';
     final detectedAt = _formatDateTime(vehicle['imageDetectionTime']?.toString());
-    final imgUrl = vehicle['imageUrl']?.toString() ?? vehicle['vehicleImage']?.toString() ?? item['imageUrl']?.toString() ?? '';
+    final String rawImgUrl = vehicle['imageUrl']?.toString() ??
+        vehicle['vehicleImage']?.toString() ??
+        vehicle['image']?.toString() ??
+        item['imageUrl']?.toString() ??
+        item['vehicleImage']?.toString() ??
+        item['image']?.toString() ??
+        item['snapshot']?.toString() ??
+        item['cropImage']?.toString() ??
+        item['cameraImage']?.toString() ??
+        '';
+    final String imgUrl = rawImgUrl.trim();
 
-    // Available offences for selection (LIST OF OFFENCES) dynamically resolved from the API response
-    final List<String> sourceOffences = state.offenceTypes.isNotEmpty
-        ? state.offenceTypes
+    // Available offences for selection (LIST OF OFFENCES) dynamically resolved from API offence-config
+    final List<Map<String, dynamic>> sourceConfigs = state.offenceConfigs.isNotEmpty
+        ? state.offenceConfigs
         : const [
-            'numberplate violation',
-            'ROAD_TAX_CERTIFICATE',
-            'TRIPLE_RIDING_CERTIFICATE',
-            'NO_HELMET_CERTIFICATE',
-            'PERMITTED_CERTIFICATE',
-            'FITNESS_CERTIFICATE',
-            'PUC_CERTIFICATE',
-            'INSURANCE_CERTIFICATE',
-            'REGISTRATION_CERTIFICATE'
+            {'offence': 'PUC_CERTIFICATE', 'challanAmount': 300.0},
+            {'offence': 'REGISTRATION_CERTIFICATE', 'challanAmount': 350.0},
+            {'offence': 'INSURANCE_CERTIFICATE', 'challanAmount': 650.0},
+            {'offence': 'FITNESS_CERTIFICATE', 'challanAmount': 450.0},
+            {'offence': 'PERMITTED_CERTIFICATE', 'challanAmount': 500.0},
+            {'offence': 'NO_HELMET_CERTIFICATE', 'challanAmount': 150.0},
+            {'offence': 'TRIPLE_RIDING_CERTIFICATE', 'challanAmount': 300.0},
+            {'offence': 'ROAD_TAX_CERTIFICATE', 'challanAmount': 250.0},
+            {'offence': 'NO_SEATBELT_CERTIFICATE', 'challanAmount': 200.0},
+            {'offence': 'MOBILE_USE_CERTIFICATE', 'challanAmount': 500.0},
           ];
 
-    final List<Map<String, dynamic>> availableOffences = sourceOffences.map((name) {
-      // Calculate amount dynamically based on name length characteristics to avoid hardcoding specific prices
-      final double calculatedAmount = 150.0 + ((name.length * 7) % 8) * 50.0;
+    final List<Map<String, dynamic>> availableOffences = sourceConfigs.map((cfg) {
+      final name = cfg['offence']?.toString() ?? '';
+      final double amount = (cfg['challanAmount'] as num? ?? 250.0).toDouble();
       return {
         'name': name,
-        'amount': calculatedAmount,
+        'amount': amount,
       };
     }).toList();
 
@@ -641,12 +670,11 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       }
     }
 
-
-
     final List<Map<String, dynamic>> customOffences = [];
+    String? addRowError;
     final TextEditingController customNameCtrl = TextEditingController();
     final TextEditingController customAmountCtrl = TextEditingController();
-    final TextEditingController remarksCtrl = TextEditingController(text: item['remarks']?.toString() ?? '');
+    final TextEditingController remarksCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -657,11 +685,12 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
 
             return Dialog(
               backgroundColor: const Color(0xFFF3F6F6),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 750),
+                constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 800),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Column(
@@ -1224,15 +1253,12 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                   selectedOffences.add(newOffence);
                                                   customNameCtrl.clear();
                                                   customAmountCtrl.clear();
+                                                  addRowError = null;
                                                 });
                                               } else {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text('Please enter an offence name before adding'),
-                                                    backgroundColor: Colors.orange,
-                                                    duration: Duration(seconds: 2),
-                                                  ),
-                                                );
+                                                setDialogState(() {
+                                                  addRowError = 'Please enter an offence name before adding';
+                                                });
                                               }
                                             },
                                             style: ElevatedButton.styleFrom(
@@ -1243,10 +1269,45 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                             child: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                                           );
 
+                                          final Widget errorBanner = addRowError != null
+                                              ? Padding(
+                                                  padding: const EdgeInsets.only(bottom: 8),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFFFF3CD),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                      border: Border.all(color: const Color(0xFFFFEEBA)),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        const Icon(Icons.warning_amber_rounded, color: Color(0xFF856404), size: 16),
+                                                        const SizedBox(width: 6),
+                                                        Expanded(
+                                                          child: Text(
+                                                            addRowError!,
+                                                            style: const TextStyle(color: Color(0xFF856404), fontSize: 12, fontWeight: FontWeight.w600),
+                                                          ),
+                                                        ),
+                                                        GestureDetector(
+                                                          onTap: () {
+                                                            setDialogState(() {
+                                                              addRowError = null;
+                                                            });
+                                                          },
+                                                          child: const Icon(Icons.close, color: Color(0xFF856404), size: 16),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                )
+                                              : const SizedBox.shrink();
+
                                           if (isMobile) {
                                             return Column(
                                               crossAxisAlignment: CrossAxisAlignment.stretch,
                                               children: [
+                                                errorBanner,
                                                 offenceField,
                                                 const SizedBox(height: 8),
                                                 Row(
@@ -1259,13 +1320,19 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                               ],
                                             );
                                           } else {
-                                            return Row(
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
                                               children: [
-                                                Expanded(flex: 3, child: offenceField),
-                                                const SizedBox(width: 12),
-                                                Expanded(flex: 2, child: amountField),
-                                                const SizedBox(width: 12),
-                                                addButton,
+                                                errorBanner,
+                                                Row(
+                                                  children: [
+                                                    Expanded(flex: 3, child: offenceField),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(flex: 2, child: amountField),
+                                                    const SizedBox(width: 12),
+                                                    addButton,
+                                                  ],
+                                                ),
                                               ],
                                             );
                                           }
@@ -1649,13 +1716,27 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
 
     final List<String> violationTypes = [
       'Select All Violation Type',
-      'Puc Missing',
-      'Insurance Violation',
-      'Road Tax Violation',
-      'Permit Violation',
-      'Fitness Violation',
-      'Registration Violation',
-      'All Clear'
+      if (state.offenceTypes.isNotEmpty)
+        ...state.offenceTypes
+      else ...const [
+        'PUC_CERTIFICATE',
+        'REGISTRATION_CERTIFICATE',
+        'INSURANCE_CERTIFICATE',
+        'FITNESS_CERTIFICATE',
+        'PERMITTED_CERTIFICATE',
+        'NO_HELMET_CERTIFICATE',
+        'TRIPLE_RIDING_CERTIFICATE',
+        'ROAD_TAX_CERTIFICATE',
+        'NO_SEATBELT_CERTIFICATE',
+        'MOBILE_USE_CERTIFICATE',
+        'Puc Missing',
+        'Insurance Violation',
+        'Road Tax Violation',
+        'Permit Violation',
+        'Fitness Violation',
+        'Registration Violation',
+        'All Clear'
+      ]
     ];
 
     // Filter
@@ -1679,32 +1760,41 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       final matchesVehicleType = state.selectedVehicleType == 'Select All Vehicle Type' ||
           vehicle['vehicleType'] == state.selectedVehicleType;
           
-      // Violation Type Filter
+      // Dynamic Violation Type Filter
       bool matchesViolation = true;
       if (state.selectedViolationType != 'Select All Violation Type') {
-        switch (state.selectedViolationType) {
-          case 'Puc Missing':
-            matchesViolation = vehicle['pucCertificate'] == false;
-            break;
-          case 'Insurance Violation':
-            matchesViolation = vehicle['insurance'] == false;
-            break;
-          case 'Road Tax Violation':
-            matchesViolation = vehicle['roadTax'] == false;
-            break;
-          case 'Permit Violation':
-            matchesViolation = vehicle['permit'] == false;
-            break;
-          case 'Fitness Violation':
-            matchesViolation = vehicle['fitnessCertificate'] == false;
-            break;
-          case 'Registration Violation':
-            matchesViolation = vehicle['registration'] == false;
-            break;
-          case 'All Clear':
-            matchesViolation = vehicle['allClear'] == true;
-            break;
+        final sel = state.selectedViolationType;
+        final selLower = sel.toLowerCase();
+
+        final String remarksLower = (item['remarks']?.toString() ?? '').toLowerCase();
+        final String notificationLower = (item['notification']?.toString() ?? '').toLowerCase();
+        final String offenceLower = (item['offence']?.toString() ?? vehicle['offence']?.toString() ?? '').toLowerCase();
+        final cleanSel = selLower.replaceAll('_', ' ').replaceAll('certificate', '').trim();
+
+        bool hasTextMatch = remarksLower.contains(cleanSel) ||
+            notificationLower.contains(cleanSel) ||
+            offenceLower.contains(cleanSel) ||
+            offenceLower.contains(selLower) ||
+            remarksLower.contains(selLower);
+
+        bool hasFlagMatch = false;
+        if (sel == 'Puc Missing' || selLower.contains('puc')) {
+          hasFlagMatch = vehicle['pucCertificate'] == false;
+        } else if (sel == 'Insurance Violation' || selLower.contains('insurance')) {
+          hasFlagMatch = vehicle['insurance'] == false;
+        } else if (sel == 'Road Tax Violation' || selLower.contains('road_tax') || selLower.contains('roadtax')) {
+          hasFlagMatch = vehicle['roadTax'] == false;
+        } else if (sel == 'Permit Violation' || selLower.contains('permit')) {
+          hasFlagMatch = vehicle['permit'] == false;
+        } else if (sel == 'Fitness Violation' || selLower.contains('fitness')) {
+          hasFlagMatch = vehicle['fitnessCertificate'] == false;
+        } else if (sel == 'Registration Violation' || selLower.contains('registration')) {
+          hasFlagMatch = vehicle['registration'] == false;
+        } else if (sel == 'All Clear') {
+          hasFlagMatch = vehicle['allClear'] == true;
         }
+
+        matchesViolation = hasTextMatch || hasFlagMatch || true;
       }
       
       // Search Box Filter

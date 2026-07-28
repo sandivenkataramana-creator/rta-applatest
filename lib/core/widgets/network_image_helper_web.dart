@@ -6,18 +6,27 @@ import 'package:flutter/material.dart';
 final Set<String> _registeredViewTypes = {};
 
 Widget buildPlatformNetImage(String src, {double? width, double? height, BoxFit? fit, VoidCallback? onTap}) {
+  String cleanSrc = src.trim();
+  if (cleanSrc.isNotEmpty && !cleanSrc.startsWith('assets/') && !cleanSrc.startsWith('http://') && !cleanSrc.startsWith('https://')) {
+    cleanSrc = cleanSrc.startsWith('/') ? 'https://tgrta-anpr.in$cleanSrc' : 'https://tgrta-anpr.in/$cleanSrc';
+  }
+
   final bool hasTap = onTap != null;
-  final String viewType = 'img-${src.hashCode}-${hasTap ? 'tap' : 'notap'}';
+  final String viewType = 'img-${cleanSrc.hashCode}-${hasTap ? 'tap' : 'notap'}';
   
   if (!_registeredViewTypes.contains(viewType)) {
     _registeredViewTypes.add(viewType);
     ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
       final imgElement = html.ImageElement()
-        ..src = src
+        ..src = cleanSrc.isEmpty ? 'assets/images/background_traffic.png' : cleanSrc
         ..style.width = '100%'
         ..style.height = '100%'
         ..style.objectFit = (fit == BoxFit.cover) ? 'cover' : 'contain'
         ..style.cursor = hasTap ? 'pointer' : 'default';
+
+      imgElement.onError.listen((_) {
+        imgElement.src = 'assets/images/background_traffic.png';
+      });
       
       if (hasTap) {
         imgElement.style.pointerEvents = 'auto';
