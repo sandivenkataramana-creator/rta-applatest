@@ -168,4 +168,68 @@ class VehicleMonitoringRepository {
         .whereType<String>()
         .toList();
   }
+
+  Future<Map<String, dynamic>> checkDuplicateVcr({
+    required String registrationNumber,
+    required String offences,
+  }) async {
+    try {
+      final response = await _apiClient.post<dynamic>(
+        '/vcr/check-duplicate',
+        data: {
+          'registrationNumber': registrationNumber,
+          'offences': offences,
+        },
+      );
+      if (response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+    } catch (e) {
+      debugPrint('Error in checkDuplicateVcr: $e');
+    }
+    return {'isDuplicate': false};
+  }
+
+  Future<Map<String, dynamic>> saveVcr(Map<String, dynamic> vcrData) async {
+    final response = await _apiClient.post<dynamic>(
+      '/vcr/save',
+      data: vcrData,
+    );
+    if (response.data is Map) {
+      return Map<String, dynamic>.from(response.data as Map);
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> addChallan(Map<String, dynamic> challanData) async {
+    final response = await _apiClient.post<dynamic>(
+      '/rta/addChallan',
+      data: challanData,
+    );
+    if (response.data is Map) {
+      return Map<String, dynamic>.from(response.data as Map);
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> saveDriverSign({
+    required String vcrNumber,
+    required String driverSign,
+  }) async {
+    try {
+      final response = await _apiClient.post<dynamic>(
+        '/vcr/saveDriverSign',
+        data: {
+          'vcrNumber': vcrNumber,
+          'driverSign': driverSign,
+        },
+      );
+      if (response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+    } catch (e) {
+      debugPrint('Warning: saveDriverSign API error: $e');
+    }
+    return {};
+  }
 }

@@ -5,7 +5,12 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'dart:typed_data';
 import '../../core/widgets/loading_overlay.dart';
+import '../../core/utils/pdf_helper.dart';
+import '../../core/utils/uppercase_formatter.dart';
 import 'dashboard_notifier.dart';
 import 'dashboard_provider.dart';
 import 'models/missing_certificate_model.dart';
@@ -20,6 +25,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _vehicleDistChartKey = GlobalKey();
+  final GlobalKey _revenueChartKey = GlobalKey();
 
   static const _districtHint = 'Select All District';
   static const _zoneHint = 'Select All Zone';
@@ -32,12 +39,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     'This Week',
     'This Month',
     'This Year',
+    'Custom',
   ];
 
   String? _selectedDistrict = 'Select All District';
   String? _selectedZone = 'Select All Zone';
   String? _selectedCamera = 'Select All Camera';
   String? _selectedTimeRange = 'Today';
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
   DateTime _lastUpdatedTime = DateTime.now();
   bool _showOverviewFilters = false;
   String? _expandedComplianceCategory;
@@ -76,6 +86,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       zone: _selectedZone,
       camera: cameraID,
       timeRange: _selectedTimeRange,
+      customStartDate: _customStartDate,
+      customEndDate: _customEndDate,
     );
     ref.invalidate(missingCertificatesProvider(params));
 
@@ -85,7 +97,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       zone: _selectedZone,
       camera: cameraID,
       timeRange: _selectedTimeRange,
+      customStartDate: _customStartDate,
+      customEndDate: _customEndDate,
       isInitial: true,
+    );
+  }
+
+  Future<void> _pickCustomDateRange(BuildContext context) async {
+    final now = DateTime.now();
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      initialDateRange: null,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xFF0F5D55),
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _customStartDate = picked.start;
+        _customEndDate = picked.end;
+        _selectedTimeRange = 'Custom';
+      });
+      _applyFilters();
+    }
+  }
+
+  void _applyFilters() {
+    if (!mounted) return;
+    final state = ref.read(dashboardNotifierProvider);
+    final cameraID = state.cameraLocationToId[_selectedCamera];
+    ref.read(dashboardNotifierProvider.notifier).fetchDashboard(
+      district: _selectedDistrict,
+      zone: _selectedZone,
+      camera: cameraID,
+      timeRange: _selectedTimeRange,
+      customStartDate: _customStartDate,
+      customEndDate: _customEndDate,
     );
   }
 
@@ -125,6 +183,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       zone: _selectedZone,
       camera: cameraID,
       timeRange: _selectedTimeRange,
+      customStartDate: _customStartDate,
+      customEndDate: _customEndDate,
     );
 
     ref.listen<AsyncValue<MissingCertificateModel>>(
@@ -152,6 +212,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               district: _selectedDistrict,
               zone: _selectedZone,
               camera: camId,
+              timeRange: _selectedTimeRange,
+              customStartDate: _customStartDate,
+              customEndDate: _customEndDate,
             );
             ref.invalidate(missingCertificatesProvider(p));
             await ref.read(missingCertificatesProvider(p).future);
@@ -160,6 +223,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               zone: _selectedZone,
               camera: camId,
               timeRange: _selectedTimeRange,
+              customStartDate: _customStartDate,
+              customEndDate: _customEndDate,
             );
             if (mounted) {
               setState(() {
@@ -260,14 +325,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         hint: _districtHint,
                         value: _selectedDistrict,
                         options: state.districts,
-                        onChanged: (value) {
+                        onChanged: (value) async {
                           setState(() {
                             _selectedDistrict = value;
                             _selectedZone = 'Select All Zone';
                             _selectedCamera = 'Select All Camera';
                           });
                           if (value != null && value != 'Select All District') {
-                            ref.read(dashboardNotifierProvider.notifier).fetchZonesForDistrict(value);
+                            final autoZone = await ref.read(dashboardNotifierProvider.notifier).fetchZonesForDistrict(value);
+                            if (autoZone != null && mounted) {
+                              setState(() => _selectedZone = autoZone);
+                              ref.read(dashboardNotifierProvider.notifier).fetchCamerasForZone(autoZone);
+                            }
                           } else {
                             ref.read(dashboardNotifierProvider.notifier).resetZones();
                           }
@@ -302,12 +371,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         prefixIcon: Icons.videocam_outlined,
                       );
 
+                      // Time range: show date picker for 'Custom', else just set value
                       final timeRangeDropdown = _buildDropdownField(
                         hint: _timeRangeHint,
                         value: _selectedTimeRange,
                         options: _timeRangeOptions,
-                        onChanged: (value) => setState(() => _selectedTimeRange = value),
+                        onChanged: (value) {
+                          if (value == 'Custom') {
+                            _pickCustomDateRange(context);
+                          } else {
+                            setState(() {
+                              _selectedTimeRange = value;
+                              _customStartDate = null;
+                              _customEndDate = null;
+                            });
+                          }
+                        },
                         prefixIcon: Icons.calendar_today_outlined,
+                        suffix: _selectedTimeRange == 'Custom' && _customStartDate != null
+                            ? Text(
+                                '${_customStartDate!.day}/${_customStartDate!.month} – ${_customEndDate!.day}/${_customEndDate!.month}',
+                                style: const TextStyle(fontSize: 10, color: Color(0xFF0F5D55)),
+                              )
+                            : null,
                       );
 
                       final submitButton = ElevatedButton(
@@ -318,6 +404,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             zone: _selectedZone,
                             camera: cameraID,
                             timeRange: _selectedTimeRange,
+                            customStartDate: _customStartDate,
+                            customEndDate: _customEndDate,
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -403,9 +491,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             title: 'Total No.of Vehicles',
                             value: missingCertificatesAsync.maybeWhen(
                               data: (data) => NumberFormat.decimalPattern().format(data.vehicleCount),
-                              orElse: () => _getTotalVehicles(state.offenceData) > 0
-                                  ? _getTotalVehicles(state.offenceData).toString()
-                                  : (state.kpis?.totalVehiclesMonth.toString() ?? '66306'),
+                              orElse: () => '0',
                             ),
                             icon: Icons.directions_car,
                             gradient: const LinearGradient(
@@ -424,6 +510,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
+                            onTap: () {
+                              _showChallanDetailsModal(
+                                context,
+                                ref,
+                                title: 'e-Challan',
+                                challanTypes: const ["RAISE", "ECHALLAN", "E_CHALLAN"],
+                              );
+                            },
                           ),
                           _buildKeyMetricCard(
                             context,
@@ -435,6 +529,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
+                            onTap: () {
+                              _showChallanDetailsModal(
+                                context,
+                                ref,
+                                title: 'Manual Challan',
+                                challanTypes: const ["COLLECT", "MANUAL"],
+                              );
+                            },
                           ),
                           _buildKeyMetricCard(
                             context,
@@ -446,6 +548,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
+                            onTap: () {
+                              _showChallanDetailsModal(
+                                context,
+                                ref,
+                                title: 'Vehicles Seized',
+                                challanTypes: const ["SEIZE", "SEIZED"],
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -573,6 +683,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     _buildChartMenu(context, 'Total Revenue Generated'),
                                   ],
                                 ),
+                                const SizedBox(height: 12),
+                                _buildDynamicRevenueHeader(state.monthlyRevenue),
                                 const SizedBox(height: 16),
                                 SizedBox(
                                   height: 320,
@@ -728,6 +840,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           _buildChartMenu(context, 'Total Revenue Generated'),
                                         ],
                                       ),
+                                      const SizedBox(height: 12),
+                                      _buildDynamicRevenueHeader(state.monthlyRevenue),
                                       const SizedBox(height: 16),
                                       SizedBox(
                                         height: 360,
@@ -791,6 +905,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required List<String> options,
     required ValueChanged<String?> onChanged,
     required IconData prefixIcon,
+    Widget? suffix,
   }) {
     final String? safeValue = (value != null && options.contains(value))
         ? value
@@ -813,6 +928,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Icon(prefixIcon, color: const Color(0xFF0F5D55), size: 14),
         ),
         prefixIconConstraints: const BoxConstraints(minWidth: 24, minHeight: 20),
+        suffixIcon: suffix != null
+            ? Padding(padding: const EdgeInsets.only(right: 28), child: suffix)
+            : null,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Color(0xFFDCECEC)),
@@ -874,96 +992,91 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required String value,
     required IconData icon,
     required Gradient gradient,
+    VoidCallback? onTap,
   }) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isVerySmall = screenWidth < 360;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isVerySmall ? 10 : 16,
-        vertical: isVerySmall ? 10 : 14,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: isVerySmall ? 40 : 48,
-            height: isVerySmall ? 40 : 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2),
-                width: 1.0,
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: isVerySmall ? 20 : 24,
-            ),
+            ],
           ),
-          SizedBox(width: isVerySmall ? 10 : 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.1,
+          padding: EdgeInsets.symmetric(
+            horizontal: isVerySmall ? 10 : 16,
+            vertical: isVerySmall ? 10 : 14,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: isVerySmall ? 40 : 48,
+                height: isVerySmall ? 40 : 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1.0,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: isVerySmall ? 20 : 24,
+                ),
+              ),
+              SizedBox(width: isVerySmall ? 10 : 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          height: 1.1,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      title.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  title.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: Colors.white.withValues(alpha: 0.8),
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  int _getTotalVehicles(Map<String, dynamic>? offenceData) {
-    if (offenceData == null || offenceData.isEmpty) {
-      return 0;
-    }
-    if (offenceData.containsKey('totalVehicles')) {
-      return (offenceData['totalVehicles'] as num? ?? 0).toInt();
-    }
-    final reg = offenceData['REGISTRATION_CERTIFICATE'] as Map<String, dynamic>?;
-    final found = (reg?['certificateFound'] as num? ?? 0).toInt();
-    final expired = (reg?['certificateExpired'] as num? ?? 0).toInt();
-    return found + expired;
-  }
 
   List<_SummaryMetric> _getSummaryMetrics(Map<String, dynamic>? offenceData) {
     if (offenceData == null || offenceData.isEmpty) {
@@ -1329,23 +1442,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   ) {
     final totalVehiclesVal = missingCertificatesAsync.maybeWhen(
       data: (data) => NumberFormat.decimalPattern().format(data.vehicleCount),
-      orElse: () => _getTotalVehicles(state.offenceData) > 0
-          ? _getTotalVehicles(state.offenceData).toString()
-          : (state.kpis?.totalVehiclesMonth.toString() ?? '27,440'),
+      orElse: () => '0',
     );
 
     final districtDropdown = _buildDropdownField(
       hint: _districtHint,
       value: _selectedDistrict,
       options: state.districts,
-      onChanged: (value) {
+      onChanged: (value) async {
         setState(() {
           _selectedDistrict = value;
           _selectedZone = 'Select All Zone';
           _selectedCamera = 'Select All Camera';
         });
         if (value != null && value != 'Select All District') {
-          ref.read(dashboardNotifierProvider.notifier).fetchZonesForDistrict(value);
+          final autoZone = await ref.read(dashboardNotifierProvider.notifier).fetchZonesForDistrict(value);
+          if (autoZone != null && mounted) {
+            setState(() => _selectedZone = autoZone);
+            ref.read(dashboardNotifierProvider.notifier).fetchCamerasForZone(autoZone);
+            ref.read(dashboardNotifierProvider.notifier).fetchDashboard(
+              district: value,
+              zone: autoZone,
+              camera: '',
+              timeRange: _selectedTimeRange,
+              customStartDate: _customStartDate,
+              customEndDate: _customEndDate,
+            );
+            return;
+          }
         } else {
           ref.read(dashboardNotifierProvider.notifier).resetZones();
         }
@@ -1357,6 +1481,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           zone: 'Select All Zone',
           camera: '',
           timeRange: _selectedTimeRange,
+          customStartDate: _customStartDate,
+          customEndDate: _customEndDate,
         );
       },
       prefixIcon: Icons.location_on_outlined,
@@ -1413,17 +1539,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       value: _selectedTimeRange,
       options: _timeRangeOptions,
       onChanged: (value) {
-        setState(() {
-          _selectedTimeRange = value;
-        });
-        final cameraID = state.cameraLocationToId[_selectedCamera];
-        // Auto-apply
-        ref.read(dashboardNotifierProvider.notifier).fetchDashboard(
-          district: _selectedDistrict,
-          zone: _selectedZone,
-          camera: cameraID,
-          timeRange: value,
-        );
+        if (value == 'Custom') {
+          _pickCustomDateRange(context);
+        } else {
+          setState(() {
+            _selectedTimeRange = value;
+            _customStartDate = null;
+            _customEndDate = null;
+          });
+          final cameraID = state.cameraLocationToId[_selectedCamera];
+          // Auto-apply
+          ref.read(dashboardNotifierProvider.notifier).fetchDashboard(
+            district: _selectedDistrict,
+            zone: _selectedZone,
+            camera: cameraID,
+            timeRange: value,
+          );
+        }
       },
       prefixIcon: Icons.calendar_today_outlined,
     );
@@ -1560,6 +1692,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     end: Alignment.bottomRight,
                   ),
                   trend: (int.tryParse(state.eChallan) ?? 0) > 0 ? '↑ Active Fines' : '— No Change',
+                  onTap: () {
+                    _showChallanDetailsModal(
+                      context,
+                      ref,
+                      title: 'e-Challan',
+                      challanTypes: const ["RAISE", "ECHALLAN", "E_CHALLAN"],
+                    );
+                  },
                 ),
                 const SizedBox(width: 12),
                 _buildOverviewStatCard(
@@ -1572,6 +1712,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     end: Alignment.bottomRight,
                   ),
                   trend: (int.tryParse(state.manualChallan) ?? 0) > 0 ? '↑ Collected Fines' : '— No Change',
+                  onTap: () {
+                    _showChallanDetailsModal(
+                      context,
+                      ref,
+                      title: 'Manual Challan',
+                      challanTypes: const ["COLLECT", "MANUAL"],
+                    );
+                  },
                 ),
                 const SizedBox(width: 12),
                 _buildOverviewStatCard(
@@ -1584,6 +1732,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     end: Alignment.bottomRight,
                   ),
                   trend: (int.tryParse(state.seizedVehicles) ?? 0) > 0 ? '↑ Seized Vehicles' : '— No Change',
+                  onTap: () {
+                    _showChallanDetailsModal(
+                      context,
+                      ref,
+                      title: 'Vehicles Seized',
+                      challanTypes: const ["SEIZE", "SEIZED"],
+                    );
+                  },
                 ),
               ],
             ),
@@ -1624,20 +1780,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            elevation: 1,
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 4,
-                    child: SizedBox(
-                      height: 150,
+          RepaintBoundary(
+            key: _vehicleDistChartKey,
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 1,
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: SizedBox(
+                        height: 150,
                       child: missingCertificatesAsync.when(
                         data: (data) {
                           final chartData = [
@@ -1728,6 +1886,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
           ),
+          ),
           const SizedBox(height: 24),
 
           Row(
@@ -1745,25 +1904,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            elevation: 1,
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
+          RepaintBoundary(
+            key: _revenueChartKey,
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 1,
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildRevenueIndicator('₹ 7.65 Cr', 'Jul (Current)', const Color(0xFF7A7BF2)),
-                      _buildRevenueIndicator('₹ 43.04 Cr', 'May (Highest)', const Color(0xFFED5C7D)),
-                      _buildRevenueIndicator('₹ 2.80 Cr', 'Apr (Previous)', const Color(0xFF2FA85C)),
-                    ],
-                  ),
+                  _buildDynamicRevenueHeader(state.monthlyRevenue),
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 220,
@@ -1836,6 +1990,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ],
               ),
             ),
+          ),
           ),
           const SizedBox(height: 16),
         ],
@@ -2001,77 +2156,84 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required IconData icon,
     required Gradient gradient,
     required String trend,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      width: 125,
-      height: 140,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.15),
-          ),
-          const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              trend,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: Container(
+          width: 125,
+          height: 140,
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
               ),
-              maxLines: 1,
-            ),
+            ],
           ),
-        ],
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                height: 1,
+                color: Colors.white.withValues(alpha: 0.15),
+              ),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  trend,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2341,6 +2503,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildDynamicRevenueHeader(Map<String, double> monthlyRevenue) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final now = DateTime.now();
+    final currentMonthIdx = now.month; // 1..12
+    final prevMonthIdx = currentMonthIdx > 1 ? currentMonthIdx - 1 : 12;
+
+    final currentVal = monthlyRevenue[currentMonthIdx.toString()] ?? 0.0;
+    final prevVal = monthlyRevenue[prevMonthIdx.toString()] ?? 0.0;
+
+    String highestMonthName = months[currentMonthIdx - 1];
+    double highestVal = 0.0;
+    monthlyRevenue.forEach((key, val) {
+      if (val > highestVal) {
+        highestVal = val;
+        final mInt = int.tryParse(key);
+        if (mInt != null && mInt >= 1 && mInt <= 12) {
+          highestMonthName = months[mInt - 1];
+        }
+      }
+    });
+
+    String formatAmt(double amt) {
+      if (amt >= 10000000) {
+        return '₹ ${(amt / 10000000).toStringAsFixed(2)} Cr';
+      } else if (amt >= 100000) {
+        return '₹ ${(amt / 100000).toStringAsFixed(2)} L';
+      } else if (amt >= 1000) {
+        return '₹ ${(amt / 1000).toStringAsFixed(1)} K';
+      } else {
+        return '₹ ${amt.toStringAsFixed(0)}';
+      }
+    }
+
+    final curLabel = '${months[currentMonthIdx - 1]} (Current)';
+    final highLabel = '$highestMonthName (Highest)';
+    final prevLabel = '${months[prevMonthIdx - 1]} (Previous)';
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _buildRevenueIndicator(formatAmt(currentVal), curLabel, const Color(0xFF7A7BF2)),
+        _buildRevenueIndicator(formatAmt(highestVal), highLabel, const Color(0xFFED5C7D)),
+        _buildRevenueIndicator(formatAmt(prevVal), prevLabel, const Color(0xFF2FA85C)),
+      ],
+    );
+  }
+
   Widget _buildRevenueIndicator(String amount, String period, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2366,7 +2575,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  void _exportChart(BuildContext context, String title, String format) {
+  Future<void> _exportChart(BuildContext context, String title, String format) async {
     if (format == 'fullscreen') {
       final state = ref.read(dashboardNotifierProvider);
       final params = MissingCertificatesParams(
@@ -2449,27 +2658,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ],
                   ] else ...[
                     // Total Revenue Generated
-                    SizedBox(
-                      height: 300,
-                      child: SfCartesianChart(
-                        primaryXAxis: CategoryAxis(majorGridLines: const MajorGridLines(width: 0)),
-                        primaryYAxis: NumericAxis(
-                          numberFormat: NumberFormat.compact(),
-                          axisLine: const AxisLine(width: 0),
-                        ),
-                        series: <ColumnSeries<_ChartData, String>>[
-                          ColumnSeries<_ChartData, String>(
-                            dataSource: _getRevenueData(state.monthlyRevenue),
-                            xValueMapper: (data, _) => data.label,
-                            yValueMapper: (data, _) => data.value,
-                            pointColorMapper: (data, _) => data.color,
-                            dataLabelSettings: const DataLabelSettings(
-                              isVisible: true,
-                              labelPosition: ChartDataLabelPosition.outside,
-                              textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
-                            ),
+                    RepaintBoundary(
+                      key: _revenueChartKey,
+                      child: SizedBox(
+                        height: 300,
+                        child: SfCartesianChart(
+                          primaryXAxis: CategoryAxis(majorGridLines: const MajorGridLines(width: 0)),
+                          primaryYAxis: NumericAxis(
+                            numberFormat: NumberFormat.compact(),
+                            axisLine: const AxisLine(width: 0),
                           ),
-                        ],
+                          series: <ColumnSeries<_ChartData, String>>[
+                            ColumnSeries<_ChartData, String>(
+                              dataSource: _getRevenueData(state.monthlyRevenue),
+                              xValueMapper: (data, _) => data.label,
+                              yValueMapper: (data, _) => data.value,
+                              pointColorMapper: (data, _) => data.color,
+                              dataLabelSettings: const DataLabelSettings(
+                                isVisible: true,
+                                labelPosition: ChartDataLabelPosition.outside,
+                                textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -2482,25 +2694,691 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF0F5D55),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Successfully downloaded $title as ${format.toUpperCase()}. Saved to downloads.',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-              ),
+    try {
+      final key = (title == 'Vehicle Distribution') ? _vehicleDistChartKey : _revenueChartKey;
+      final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Chart element not ready for export'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      final sanitizeTitle = title.replaceAll(RegExp(r'[/\\:\s]'), '_');
+      final extension = (format == 'jpeg') ? 'jpg' : format;
+      final fileName = '${sanitizeTitle}_chart.$extension';
+
+      await PdfHelper.displayOrDownloadPdf(pngBytes, fileName);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF0F5D55),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Exported $title chart as ${format.toUpperCase()} successfully.',
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error exporting chart image: $e');
+    }
+  }
+
+  void _showChallanDetailsModal(
+    BuildContext context,
+    WidgetRef ref, {
+    required String title,
+    required List<String> challanTypes,
+  }) {
+    final repo = ref.read(dashboardNotifierProvider.notifier).repository;
+
+    String searchQuery = '';
+    int currentPage = 1;
+    const int pageSize = 10;
+    bool isLoading = true;
+    List<Map<String, dynamic>> allRecords = [];
+    String? errorMessage;
+    Map<String, bool> pdfLoadingMap = {};
+
+    final String district = _selectedDistrict ?? '';
+    final String zone = _selectedZone ?? '';
+    final String camera = _selectedCamera ?? '';
+
+    final now = DateTime.now();
+    final String todayStr = '${now.month}/${now.day}/${now.year.toString().substring(2)}';
+
+    Map<String, dynamic>? selectedPdfRecord;
+    dynamic selectedPdfData;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final mediaQuery = MediaQuery.of(context);
+            final bool isMobile = mediaQuery.size.width < 600;
+
+            if (selectedPdfRecord != null) {
+              final rec = selectedPdfRecord!;
+              final vcr = (rec['vcrNumber'] ?? 'N/A').toString();
+              final vehicleNo = (rec['registrationNumber'] ?? rec['vehicleNumber'] ?? 'N/A').toString();
+              final offences = (rec['offences'] ?? 'N/A').toString();
+              final fine = (rec['fineAmount'] as num? ?? 0.0).toDouble();
+
+              return Dialog(
+                backgroundColor: Colors.white,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 550),
+                  padding: EdgeInsets.all(isMobile ? 16 : 24),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top Nav
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                setModalState(() {
+                                  selectedPdfRecord = null;
+                                  selectedPdfData = null;
+                                });
+                              },
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.arrow_back, size: 18, color: Color(0xFF1D4ED8)),
+                                  SizedBox(width: 4),
+                                  Text('Back to List', style: TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Divider(color: Color(0xFFE2E8F0)),
+                        const SizedBox(height: 12),
+
+                        // Title Bar
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B998).withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.picture_as_pdf, color: Color(0xFF10B998), size: 22),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'VCR Receipt PDF',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E2A5E),
+                                  ),
+                                ),
+                                Text(
+                                  vcr,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1D4ED8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Details Card
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              _buildReceiptDetailRow('VCR Number', vcr, isBold: true, valueColor: const Color(0xFF1D4ED8)),
+                              const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                              _buildReceiptDetailRow('Vehicle No', vehicleNo, isBold: true),
+                              const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                              _buildReceiptDetailRow('Offences', offences, isBold: true, valueColor: const Color(0xFFEF4444)),
+                              const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                              _buildReceiptDetailRow('Fine Amount', '₹${fine.toStringAsFixed(2)}', isBold: true),
+                              const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                              _buildReceiptDetailRow('Status', 'PDF Generated & Saved', valueColor: const Color(0xFF10B998)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Action Buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  await PdfHelper.displayOrDownloadPdf(selectedPdfData, '$vcr.pdf', openViewer: true);
+                                },
+                                icon: const Icon(Icons.open_in_new, size: 18, color: Colors.white),
+                                label: const Text('Open / Download PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF192A68),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            OutlinedButton(
+                              onPressed: () {
+                                setModalState(() {
+                                  selectedPdfRecord = null;
+                                  selectedPdfData = null;
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: const Text('Back', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            if (isLoading && allRecords.isEmpty && errorMessage == null) {
+              repo.fetchChallanDetails(
+                challanTypes: challanTypes,
+                districtName: district,
+                zoneName: zone,
+                cameraId: camera,
+              ).then((data) {
+                setModalState(() {
+                  allRecords = data;
+                  isLoading = false;
+                });
+              }).catchError((err) {
+                setModalState(() {
+                  errorMessage = err.toString();
+                  isLoading = false;
+                });
+              });
+            }
+
+            final filteredRecords = allRecords.where((rec) {
+              if (searchQuery.trim().isEmpty) return true;
+              final q = searchQuery.toLowerCase().trim();
+              final vcr = (rec['vcrNumber'] ?? '').toString().toLowerCase();
+              final vehicle = (rec['registrationNumber'] ?? rec['vehicleNumber'] ?? '').toString().toLowerCase();
+              final offences = (rec['offences'] ?? '').toString().toLowerCase();
+              return vcr.contains(q) || vehicle.contains(q) || offences.contains(q);
+            }).toList();
+
+            final int totalItems = filteredRecords.length;
+            final int totalPages = (totalItems / pageSize).ceil() == 0 ? 1 : (totalItems / pageSize).ceil();
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            final int startIndex = totalItems == 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+            final int endIndex = ((currentPage * pageSize) > totalItems) ? totalItems : (currentPage * pageSize);
+
+            final pageRecords = filteredRecords.skip((currentPage - 1) * pageSize).take(pageSize).toList();
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 900),
+                width: double.infinity,
+                padding: EdgeInsets.all(isMobile ? 12 : 20),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$title Details',
+                            style: TextStyle(
+                              fontSize: isMobile ? 18 : 22,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1E2A5E),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close, color: Colors.grey, size: 22),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(color: Color(0xFFE2E8F0)),
+                      const SizedBox(height: 12),
+
+                      // Filter Subheader
+                      if (isMobile) ...[
+                        Text(
+                          '| From: $todayStr To: $todayStr',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 36,
+                          child: TextField(
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
+                            onChanged: (val) {
+                              setModalState(() {
+                                searchQuery = val.toUpperCase();
+                                currentPage = 1;
+                              });
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Search vehicle or VCR...',
+                              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                              prefixIcon: const Icon(Icons.search, size: 16, color: Colors.grey),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: const BorderSide(color: Color(0xFF192A68)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '| From: $todayStr To: $todayStr',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 240,
+                              height: 36,
+                              child: TextField(
+                                textCapitalization: TextCapitalization.characters,
+                                inputFormatters: [UpperCaseTextFormatter()],
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    searchQuery = val.toUpperCase();
+                                    currentPage = 1;
+                                  });
+                                },
+                                decoration: InputDecoration(
+                                  hintText: 'Search vehicle or VCR...',
+                                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                  prefixIcon: const Icon(Icons.search, size: 16, color: Colors.grey),
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(color: Color(0xFF192A68)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
+                      // Data Table Container (with horizontal scroll for mobile)
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: 700),
+                              child: Column(
+                                children: [
+                                  // Dark Navy Header Row
+                                  Container(
+                                    color: const Color(0xFF192A68),
+                                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                                    child: const Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 45,
+                                          child: Text('S.No', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center),
+                                        ),
+                                        SizedBox(
+                                          width: 170,
+                                          child: Text('VCR Number', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                        ),
+                                        SizedBox(
+                                          width: 120,
+                                          child: Text('Vehicle No', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                        ),
+                                        SizedBox(
+                                          width: 180,
+                                          child: Text('Offences', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                        ),
+                                        SizedBox(
+                                          width: 100,
+                                          child: Text('Fine Amount', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                        ),
+                                        SizedBox(
+                                          width: 110,
+                                          child: Text('Action', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Table Body
+                                  if (isLoading)
+                                    const Padding(
+                                      padding: EdgeInsets.all(40),
+                                      child: Center(child: CircularProgressIndicator(color: Color(0xFF192A68))),
+                                    )
+                                  else if (errorMessage != null)
+                                    Padding(
+                                      padding: const EdgeInsets.all(30),
+                                      child: Center(child: Text('Error loading data: $errorMessage', style: const TextStyle(color: Colors.red))),
+                                    )
+                                  else if (pageRecords.isEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.all(30),
+                                      child: Center(child: Text('No records found', style: TextStyle(color: Colors.grey, fontSize: 14))),
+                                    )
+                                  else
+                                    Column(
+                                      children: List.generate(pageRecords.length, (index) {
+                                        final item = pageRecords[index];
+                                        final sNo = startIndex + index;
+                                        final vcr = (item['vcrNumber'] ?? 'N/A').toString();
+                                        final vehicleNo = (item['registrationNumber'] ?? item['vehicleNumber'] ?? 'N/A').toString();
+                                        final offences = (item['offences'] ?? 'N/A').toString();
+                                        final fine = (item['fineAmount'] as num? ?? 0.0).toDouble();
+                                        final bool isGeneratingPdf = pdfLoadingMap[vcr] ?? false;
+
+                                        return Container(
+                                          color: index % 2 == 0 ? Colors.white : const Color(0xFFF8FAFC),
+                                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 45,
+                                                child: Text('$sNo', style: const TextStyle(fontSize: 13, color: Color(0xFF475569)), textAlign: TextAlign.center),
+                                              ),
+                                              SizedBox(
+                                                width: 170,
+                                                child: Text(
+                                                  vcr,
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: 120,
+                                                child: Text(
+                                                  vehicleNo,
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: 180,
+                                                child: Text(
+                                                  offences,
+                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFEF4444)),
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: 100,
+                                                child: Text(
+                                                  '₹${fine.toStringAsFixed(2)}',
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: 110,
+                                                child: OutlinedButton(
+                                                  onPressed: isGeneratingPdf
+                                                      ? null
+                                                      : () async {
+                                                          setModalState(() {
+                                                            pdfLoadingMap[vcr] = true;
+                                                          });
+                                                          try {
+                                                            final pdfData = await repo.generatePdf(vcr);
+                                                            setModalState(() {
+                                                              pdfLoadingMap[vcr] = false;
+                                                              selectedPdfRecord = item;
+                                                              selectedPdfData = pdfData;
+                                                            });
+                                                            await PdfHelper.displayOrDownloadPdf(pdfData, '$vcr.pdf');
+                                                          } catch (err) {
+                                                            setModalState(() {
+                                                              pdfLoadingMap[vcr] = false;
+                                                            });
+                                                          }
+                                                        },
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFF3B82F6)),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                  ),
+                                                  child: isGeneratingPdf
+                                                      ? const SizedBox(
+                                                          width: 14,
+                                                          height: 14,
+                                                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF3B82F6)),
+                                                        )
+                                                      : const Row(
+                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                          children: [
+                                                            Icon(Icons.picture_as_pdf, size: 13, color: Color(0xFF3B82F6)),
+                                                            SizedBox(width: 4),
+                                                            Text('View PDF', style: TextStyle(fontSize: 11, color: Color(0xFF3B82F6), fontWeight: FontWeight.bold)),
+                                                          ],
+                                                        ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Footer Row
+                      if (isMobile) ...[
+                        Center(
+                          child: Text(
+                            'Showing $startIndex to $endIndex of $totalItems entries',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: currentPage > 1
+                                  ? () {
+                                      setModalState(() {
+                                        currentPage--;
+                                      });
+                                    }
+                                  : null,
+                              child: const Text('« Previous', style: TextStyle(fontSize: 12)),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF009688),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('$currentPage', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ),
+                            TextButton(
+                              onPressed: currentPage < totalPages
+                                  ? () {
+                                      setModalState(() {
+                                        currentPage++;
+                                      });
+                                    }
+                                  : null,
+                              child: const Text('Next »', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Showing $startIndex to $endIndex of $totalItems entries',
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                            Row(
+                              children: [
+                                TextButton(
+                                  onPressed: currentPage > 1
+                                      ? () {
+                                          setModalState(() {
+                                            currentPage--;
+                                          });
+                                        }
+                                      : null,
+                                  child: const Text('« Previous', style: TextStyle(fontSize: 12)),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF009688),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text('$currentPage', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                ),
+                                TextButton(
+                                  onPressed: currentPage < totalPages
+                                      ? () {
+                                          setModalState(() {
+                                            currentPage++;
+                                          });
+                                        }
+                                      : null,
+                                  child: const Text('Next »', style: TextStyle(fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReceiptDetailRow(String label, String value, {bool isBold = false, Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
         ),
-        duration: const Duration(seconds: 2),
-      ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontSize: 13,
+              color: valueColor ?? const Color(0xFF1E293B),
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

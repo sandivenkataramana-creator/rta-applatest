@@ -22,9 +22,13 @@ class BudgetRepository {
     return response.data ?? {};
   }
 
-  Future<Map<String, dynamic>> fetchMonthlyRevenue(int year) async {
+  Future<Map<String, dynamic>> fetchMonthlyRevenue(
+    int year, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
     final response = await _apiClient.get<Map<String, dynamic>>(
       '/budget/revenue/monthly/$year',
+      queryParameters: queryParameters,
     );
     return response.data ?? {};
   }

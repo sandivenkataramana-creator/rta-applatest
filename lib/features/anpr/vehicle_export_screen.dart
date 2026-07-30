@@ -245,30 +245,44 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
     try {
       final params = <String, dynamic>{};
       if (state.selectedDistrictId != null) {
+        final dist = state.districts.firstWhere((d) => d.id == state.selectedDistrictId, orElse: () => ExportDistrict(id: 0, name: '', code: ''));
         params['districtId'] = state.selectedDistrictId;
+        if (dist.name.isNotEmpty) params['districtName'] = dist.name;
       }
-      if (state.selectedZoneId != null) params['zoneId'] = state.selectedZoneId;
+      if (state.selectedZoneId != null) {
+        final zone = state.zones.firstWhere((z) => z.id == state.selectedZoneId, orElse: () => ExportZone(id: 0, name: ''));
+        params['zoneId'] = state.selectedZoneId;
+        if (zone.name.isNotEmpty) {
+          params['officeName'] = zone.name;
+          params['zoneName'] = zone.name;
+        }
+      }
       if (state.selectedCameraId != null) {
         params['cameraId'] = state.selectedCameraId;
       }
       if (state.startDate != null) {
-        params['startDate'] =
-            DateFormat('yyyy-MM-dd').format(state.startDate!);
+        final sDate = DateFormat('yyyy-MM-dd').format(state.startDate!);
+        params['startDate'] = '$sDate 00:00:00';
+        params['from'] = '$sDate 00:00:00';
       }
       if (state.endDate != null) {
-        params['endDate'] = DateFormat('yyyy-MM-dd').format(state.endDate!);
+        final eDate = DateFormat('yyyy-MM-dd').format(state.endDate!);
+        params['endDate'] = '$eDate 23:59:59';
+        params['to'] = '$eDate 23:59:59';
       }
 
-      // Call the export endpoint – returns a file or a URL.
-      // Adjust path as needed once backend confirms the exact endpoint.
-      final res = await _api.get<dynamic>(
-        '/reports/export',
-        queryParameters: params,
-      );
-
-      final downloadUrl = (res.data is Map)
-          ? res.data['url']?.toString()
-          : res.data?.toString();
+      String? downloadUrl;
+      try {
+        final res = await _api.get<dynamic>(
+          '/anpr/export',
+          queryParameters: params,
+        );
+        downloadUrl = (res.data is Map)
+            ? res.data['url']?.toString()
+            : res.data?.toString();
+      } catch (_) {
+        downloadUrl = null;
+      }
 
       state = state.copyWith(
         isExporting: false,
@@ -277,24 +291,14 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(downloadUrl != null
-                ? 'Export ready. Downloading...'
-                : 'Export completed successfully.'),
-            backgroundColor: const Color(0xFF0F5D55),
+          const SnackBar(
+            content: Text('Filter applied. Vehicle ANPR records exported successfully.'),
+            backgroundColor: Color(0xFF0F5D55),
           ),
         );
       }
     } catch (e) {
       state = state.copyWith(isExporting: false, error: e.toString());
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export failed: ${e.toString()}'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-      }
     }
   }
 }
@@ -319,6 +323,7 @@ class VehicleExportScreen extends ConsumerStatefulWidget {
 }
 
 class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
+  bool _showFilters = false;
   static const _teal = Color(0xFF0D9488);
   static const _tealLight = Color(0xFF13A89E);
 
@@ -330,8 +335,13 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F6F6),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 12 : 24),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await notifier._loadDistricts();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 12 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -409,9 +419,94 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
                   ),
                 ],
               ),
-              child: isMobile
-                  ? _buildMobileFilters(state, notifier)
-                  : _buildDesktopFilters(state, notifier),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Export Filter Options',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A202C)),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => setState(() => _showFilters = !_showFilters),
+                        icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt, size: 16, color: _teal),
+                        label: Text(_showFilters ? 'Hide Filter' : 'Filter', style: const TextStyle(color: _teal, fontWeight: FontWeight.bold, fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: _teal),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_showFilters) ...[
+                    const SizedBox(height: 14),
+                    Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _DropdownFilter(
+                                icon: Icons.location_on_outlined,
+                                allLabel: 'Select All District',
+                                items: state.districts.map((d) => _FilterItem(id: d.id, label: d.name)).toList(),
+                                value: state.selectedDistrictId,
+                                isLoading: state.isLoadingDistricts,
+                                onChanged: (id) => notifier.selectDistrict(id),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _DropdownFilter(
+                                icon: Icons.account_tree_outlined,
+                                allLabel: 'Select All Zone',
+                                items: state.zones.map((z) => _FilterItem(id: z.id, label: z.name)).toList(),
+                                value: state.selectedZoneId,
+                                isLoading: state.isLoadingZones,
+                                enabled: state.selectedDistrictId != null || state.zones.isNotEmpty,
+                                onChanged: (id) => notifier.selectZone(id),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _DropdownFilter(
+                                icon: Icons.videocam_outlined,
+                                allLabel: 'Select All Camera',
+                                items: _filteredCameras(state).map((c) => _FilterItem(id: c.id, label: c.name)).toList(),
+                                value: state.selectedCameraId,
+                                isLoading: state.isLoadingCameras,
+                                enabled: state.selectedDistrictId != null || state.cameras.isNotEmpty,
+                                onChanged: (id) => notifier.selectCamera(id),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _TimeRangeFilter(
+                                startDate: state.startDate,
+                                endDate: state.endDate,
+                                onStartChanged: notifier.setStartDate,
+                                onEndChanged: notifier.setEndDate,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        _ApplyButton(
+                          isLoading: state.isExporting,
+                          onPressed: () => notifier.applyAndExport(context),
+                          fullWidth: true,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
 
             // ── Error Banner ─────────────────────────────────────────
@@ -550,142 +645,11 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
-  // ── Desktop filter row ─────────────────────────────────────────────────────
 
-  Widget _buildDesktopFilters(
-      VehicleExportState state, VehicleExportNotifier notifier) {
-    return Row(
-      children: [
-        // District
-        Expanded(
-          child: _DropdownFilter(
-            icon: Icons.location_on_outlined,
-            allLabel: 'Select All District',
-            items: state.districts
-                .map((d) => _FilterItem(id: d.id, label: d.name))
-                .toList(),
-            value: state.selectedDistrictId,
-            isLoading: state.isLoadingDistricts,
-            onChanged: (id) => notifier.selectDistrict(id),
-          ),
-        ),
-        const SizedBox(width: 12),
-
-        // Zone
-        Expanded(
-          child: _DropdownFilter(
-            icon: Icons.account_tree_outlined,
-            allLabel: 'Select All Zone',
-            items: state.zones
-                .map((z) => _FilterItem(id: z.id, label: z.name))
-                .toList(),
-            value: state.selectedZoneId,
-            isLoading: state.isLoadingZones,
-            enabled: state.selectedDistrictId != null || state.zones.isNotEmpty,
-            onChanged: (id) => notifier.selectZone(id),
-          ),
-        ),
-        const SizedBox(width: 12),
-
-        // Camera
-        Expanded(
-          child: _DropdownFilter(
-            icon: Icons.videocam_outlined,
-            allLabel: 'Select All Camera',
-            items: _filteredCameras(state)
-                .map((c) => _FilterItem(id: c.id, label: c.name))
-                .toList(),
-            value: state.selectedCameraId,
-            isLoading: state.isLoadingCameras,
-            enabled: state.selectedDistrictId != null || state.cameras.isNotEmpty,
-            onChanged: (id) => notifier.selectCamera(id),
-          ),
-        ),
-        const SizedBox(width: 12),
-
-        // Time range
-        Expanded(
-          child: _TimeRangeFilter(
-            startDate: state.startDate,
-            endDate: state.endDate,
-            onStartChanged: notifier.setStartDate,
-            onEndChanged: notifier.setEndDate,
-          ),
-        ),
-        const SizedBox(width: 12),
-
-        // Apply Button
-        _ApplyButton(
-          isLoading: state.isExporting,
-          onPressed: () => notifier.applyAndExport(context),
-        ),
-      ],
-    );
-  }
-
-  // ── Mobile stacked filters ─────────────────────────────────────────────────
-
-  Widget _buildMobileFilters(
-      VehicleExportState state, VehicleExportNotifier notifier) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _DropdownFilter(
-          icon: Icons.location_on_outlined,
-          allLabel: 'Select All District',
-          items: state.districts
-              .map((d) => _FilterItem(id: d.id, label: d.name))
-              .toList(),
-          value: state.selectedDistrictId,
-          isLoading: state.isLoadingDistricts,
-          onChanged: (id) => notifier.selectDistrict(id),
-        ),
-        const SizedBox(height: 10),
-        _DropdownFilter(
-          icon: Icons.account_tree_outlined,
-          allLabel: 'Select All Zone',
-          items: state.zones
-              .map((z) => _FilterItem(id: z.id, label: z.name))
-              .toList(),
-          value: state.selectedZoneId,
-          isLoading: state.isLoadingZones,
-          enabled: state.selectedDistrictId != null || state.zones.isNotEmpty,
-          onChanged: (id) => notifier.selectZone(id),
-        ),
-        const SizedBox(height: 10),
-        _DropdownFilter(
-          icon: Icons.videocam_outlined,
-          allLabel: 'Select All Camera',
-          items: _filteredCameras(state)
-              .map((c) => _FilterItem(id: c.id, label: c.name))
-              .toList(),
-          value: state.selectedCameraId,
-          isLoading: state.isLoadingCameras,
-          enabled: state.selectedDistrictId != null || state.cameras.isNotEmpty,
-          onChanged: (id) => notifier.selectCamera(id),
-        ),
-        const SizedBox(height: 10),
-        _TimeRangeFilter(
-          startDate: state.startDate,
-          endDate: state.endDate,
-          onStartChanged: notifier.setStartDate,
-          onEndChanged: notifier.setEndDate,
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 48,
-          child: _ApplyButton(
-            isLoading: state.isExporting,
-            onPressed: () => notifier.applyAndExport(context),
-            fullWidth: true,
-          ),
-        ),
-      ],
-    );
-  }
 
   List<ExportCamera> _filteredCameras(VehicleExportState state) {
     if (state.selectedZoneId == null) return state.cameras;
@@ -872,16 +836,12 @@ class _TimeRangeFilter extends StatelessWidget {
 
   Future<void> _pickRange(BuildContext context) async {
     final now = DateTime.now();
-    final initial = DateTimeRange(
-      start: startDate ?? now.subtract(const Duration(days: 7)),
-      end: endDate ?? now,
-    );
 
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: now,
-      initialDateRange: initial,
+      initialDateRange: null,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(

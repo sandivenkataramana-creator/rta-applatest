@@ -102,6 +102,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     String? zone,
     String? camera,
     String? timeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
     bool isInitial = false,
   }) async {
     if (!isInitial) {
@@ -151,6 +153,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         zone: zone,
         camera: camera,
         timeRange: timeRange,
+        customStartDate: customStartDate,
+        customEndDate: customEndDate,
       ).catchError((e) {
         errorMsg ??= e.toString();
         return const <String, dynamic>{};
@@ -166,12 +170,22 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         zone: zone,
         camera: camera,
         timeRange: timeRange,
+        customStartDate: customStartDate,
+        customEndDate: customEndDate,
       ).catchError((e) {
         errorMsg ??= e.toString();
         return const <String, String>{};
       });
 
-      final revenueFuture = repository.fetchMonthlyRevenue(DateTime.now().year).catchError((e) {
+      final revenueFuture = repository.fetchMonthlyRevenue(
+        DateTime.now().year,
+        district: district,
+        zone: zone,
+        camera: camera,
+        timeRange: timeRange,
+        customStartDate: customStartDate,
+        customEndDate: customEndDate,
+      ).catchError((e) {
         errorMsg ??= e.toString();
         return const <String, double>{};
       });
@@ -228,7 +242,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     }
   }
 
-  Future<void> fetchZonesForDistrict(String district) async {
+  /// Returns the auto-selected zone name if only one zone exists, else null.
+  Future<String?> fetchZonesForDistrict(String district) async {
     debugPrint('Notifier fetchZonesForDistrict called for: $district');
     state = state.copyWith(isLoading: true);
     try {
@@ -238,6 +253,12 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         zones: zonesList,
         isLoading: false,
       );
+      // Auto-select if only one real zone (besides 'Select All Zone')
+      final realZones = zonesList.where((z) => z != 'Select All Zone').toList();
+      if (realZones.length == 1) {
+        return realZones.first;
+      }
+      return null;
     } catch (e, stack) {
       debugPrint('Notifier fetchZonesForDistrict error: $e');
       debugPrint(stack.toString());
@@ -246,6 +267,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         isLoading: false,
         error: e.toString(),
       );
+      return null;
     }
   }
 

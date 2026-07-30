@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/widgets/loading_overlay.dart';
+import '../../core/utils/uppercase_formatter.dart';
 import '../../core/widgets/network_image_helper.dart';
 import '../../core/widgets/page_header_banner.dart';
 import '../../core/widgets/image_zoom_helper.dart';
@@ -857,8 +858,17 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
       backgroundColor: const Color(0xFFF3F6F6),
       body: LoadingOverlay(
         isLoading: state.isLoading,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            if (_searchController.text.trim().isNotEmpty) {
+              await notifier.searchVehicle(_searchController.text.trim());
+            } else {
+              await notifier.fetchOffenceConfigs();
+            }
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -906,6 +916,17 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                             height: 48,
                             child: TextField(
                               controller: _searchController,
+                              textCapitalization: TextCapitalization.characters,
+                              inputFormatters: [UpperCaseTextFormatter()],
+                              onChanged: (val) {
+                                final upper = val.toUpperCase();
+                                if (val != upper) {
+                                  _searchController.value = TextEditingValue(
+                                    text: upper,
+                                    selection: TextSelection.collapsed(offset: upper.length),
+                                  );
+                                }
+                              },
                               style: const TextStyle(fontSize: 14, color: Colors.black87),
                               decoration: InputDecoration(
                                 hintText: 'Enter vehicle number (e.g., AP 04 AB 1234)',
@@ -1013,19 +1034,19 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                                 ),
                               ],
                             );
-                          } else {
-                            return Row(
-                              children: [
-                                Expanded(child: textField),
-                                const SizedBox(width: 16),
-                                searchBtn,
-                                if (state.isSearched) ...[
-                                  const SizedBox(width: 12),
-                                  clearBtn,
-                                ],
-                              ],
-                            );
                           }
+
+                          return Row(
+                            children: [
+                              Expanded(child: textField),
+                              const SizedBox(width: 16),
+                              searchBtn,
+                              if (state.isSearched) ...[
+                                const SizedBox(width: 12),
+                                clearBtn,
+                              ],
+                            ],
+                          );
                         },
                       ),
                     ],
@@ -1361,7 +1382,8 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildPaginationControls(int totalItems, int itemsPerPage, int totalPages) {

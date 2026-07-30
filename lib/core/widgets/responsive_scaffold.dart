@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,7 +9,30 @@ import '../../features/alerts/alerts_state.dart';
 
 final sidebarCollapsedProvider = StateProvider<bool>((ref) => true);
 
-class AppShell extends ConsumerWidget {
+final navigationHistoryProvider =
+    StateNotifierProvider<NavigationHistoryNotifier, List<String>>((ref) {
+  return NavigationHistoryNotifier();
+});
+
+class NavigationHistoryNotifier extends StateNotifier<List<String>> {
+  NavigationHistoryNotifier() : super([AppRoutes.dashboard]);
+
+  void push(String route) {
+    if (route.isEmpty) return;
+    if (state.isNotEmpty && state.last == route) return;
+    state = [...state, route];
+  }
+
+  String? pop() {
+    if (state.length <= 1) return null;
+    final newState = List<String>.from(state);
+    newState.removeLast();
+    state = newState;
+    return state.last;
+  }
+}
+
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({
     super.key,
     required this.child,
@@ -19,13 +43,48 @@ class AppShell extends ConsumerWidget {
   final String activePath;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  DateTime? _lastBackPressTime;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(navigationHistoryProvider.notifier).push(widget.activePath);
+    });
+  }
+
+  @override
+  void didUpdateWidget(AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.activePath != oldWidget.activePath) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(navigationHistoryProvider.notifier).push(widget.activePath);
+      });
+    }
+  }
+
+  void _navigateTo(String path) {
+    if (path.isEmpty) return;
+    ref.read(navigationHistoryProvider.notifier).push(path);
+    context.go(path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activePath = widget.activePath;
+    final child = widget.child;
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width >= 900;
     final isCollapsed = ref.watch(sidebarCollapsedProvider);
 
+    Widget mainScaffold;
+
     if (isDesktop) {
-      return Scaffold(
+      mainScaffold = Scaffold(
         backgroundColor: const Color(0xFFF3F6F6),
         body: Row(
           children: [
@@ -42,6 +101,7 @@ class AppShell extends ConsumerWidget {
                   isDrawer: false,
                   isCollapsed: isCollapsed,
                   activePath: activePath,
+                  onNavigate: _navigateTo,
                 ),
               ),
             ),
@@ -51,197 +111,232 @@ class AppShell extends ConsumerWidget {
           ],
         ),
       );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFF031A1C),
-                Color(0xFF0A3C39),
-                Color(0xFF0B423E),
-              ],
-            ),
-            border: Border(
-              bottom: BorderSide(color: Color(0xFF00F5D4), width: 2),
-            ),
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/images/telangana_logo.png',
-              height: 36,
-              errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.account_balance,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Telangana ANPR Portal',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      const Flexible(
-                        child: Text(
-                          'Vehicle Identification & Enforcement Automation',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.verified,
-                        color: Colors.teal.shade200,
-                        size: 10,
-                      ),
-                    ],
-                  ),
+    } else {
+      mainScaffold = Scaffold(
+        appBar: AppBar(
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF031A1C),
+                  Color(0xFF0A3C39),
+                  Color(0xFF0B423E),
                 ],
               ),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFF00F5D4), width: 2),
+              ),
             ),
-          ],
-        ),
-        actions: [
-          Builder(
-            builder: (context) {
-              final alertsState = ref.watch(alertsNotifierProvider);
-              final alertCount = alertsState.items.length;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_none, color: Colors.white, size: 24),
-                    onPressed: () {
-                      context.go('/dashboard/alerts');
-                    },
-                  ),
-                  if (alertCount > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: IgnorePointer(
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 14,
-                            minHeight: 14,
-                          ),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
+          title: Row(
+            children: [
+              Image.asset(
+                'assets/images/telangana_logo.png',
+                height: 36,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.account_balance,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Telangana ANPR Portal',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Flexible(
                           child: Text(
-                            alertCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
+                            'Vehicle Identification & Enforcement Automation',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
                             ),
-                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.verified,
+                          color: Colors.teal.shade200,
+                          size: 10,
+                        ),
+                      ],
                     ),
-                ],
-              );
-            }
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      drawer: _PortalDrawer(
-        isDrawer: true,
-        isCollapsed: false,
-        activePath: activePath,
-      ),
-      body: child,
-      bottomNavigationBar: Builder(
-        builder: (scaffoldContext) {
-          int getActiveIndex() {
-            if (activePath == AppRoutes.dashboard) return 0;
-            if (activePath == AppRoutes.analytics) return 1;
-            if (activePath == AppRoutes.vehicleClassification) return 2;
-            if (activePath == AppRoutes.reports) return 3;
-            return 0;
-          }
-
-          return BottomNavigationBar(
-            currentIndex: getActiveIndex(),
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: const Color(0xFF0D9488),
-            unselectedItemColor: Colors.grey,
-            selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontSize: 10),
-            onTap: (index) {
-              if (index == 4) {
-                Scaffold.of(scaffoldContext).openDrawer();
-                return;
-              }
-              final paths = [
-                AppRoutes.dashboard,
-                AppRoutes.analytics,
-                AppRoutes.vehicleClassification,
-                AppRoutes.reports,
-              ];
-              context.go(paths[index]);
-            },
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home_outlined),
-                activeIcon: Icon(Icons.home),
-                label: 'Dashboard',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.bar_chart_outlined),
-                activeIcon: Icon(Icons.bar_chart),
-                label: 'Analytics',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.receipt_long_outlined),
-                activeIcon: Icon(Icons.receipt_long),
-                label: 'Challan',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.description_outlined),
-                activeIcon: Icon(Icons.description),
-                label: 'Reports',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.more_horiz_outlined),
-                activeIcon: Icon(Icons.more_horiz),
-                label: 'More',
+                  ],
+                ),
               ),
             ],
+          ),
+          actions: [
+            Builder(
+              builder: (context) {
+                final alertsState = ref.watch(alertsNotifierProvider);
+                final alertCount = alertsState.items.length;
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none, color: Colors.white, size: 24),
+                      onPressed: () {
+                        _navigateTo('/dashboard/alerts');
+                      },
+                    ),
+                    if (alertCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: IgnorePointer(
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 14,
+                              minHeight: 14,
+                            ),
+                            child: Text(
+                              alertCount.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        drawer: _PortalDrawer(
+          isDrawer: true,
+          isCollapsed: false,
+          activePath: activePath,
+          onNavigate: _navigateTo,
+        ),
+        body: child,
+        bottomNavigationBar: Builder(
+          builder: (scaffoldContext) {
+            int getActiveIndex() {
+              if (activePath == AppRoutes.dashboard) return 0;
+              if (activePath == AppRoutes.analytics) return 1;
+              if (activePath == AppRoutes.vehicleClassification) return 2;
+              if (activePath == AppRoutes.reports) return 3;
+              return 0;
+            }
+
+            return BottomNavigationBar(
+              currentIndex: getActiveIndex(),
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: const Color(0xFF0D9488),
+              unselectedItemColor: Colors.grey,
+              selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+              unselectedLabelStyle: const TextStyle(fontSize: 10),
+              onTap: (index) {
+                if (index == 4) {
+                  Scaffold.of(scaffoldContext).openDrawer();
+                  return;
+                }
+                final paths = [
+                  AppRoutes.dashboard,
+                  AppRoutes.analytics,
+                  AppRoutes.vehicleClassification,
+                  AppRoutes.reports,
+                ];
+                _navigateTo(paths[index]);
+              },
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: 'Dashboard',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.bar_chart_outlined),
+                  activeIcon: Icon(Icons.bar_chart),
+                  label: 'Analytics',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  activeIcon: Icon(Icons.receipt_long),
+                  label: 'Challan',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.description_outlined),
+                  activeIcon: Icon(Icons.description),
+                  label: 'Reports',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.more_horiz_outlined),
+                  activeIcon: Icon(Icons.more_horiz),
+                  label: 'More',
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+
+        if (activePath != AppRoutes.dashboard && activePath != '/dashboard/') {
+          final previousRoute =
+              ref.read(navigationHistoryProvider.notifier).pop();
+          if (previousRoute != null && previousRoute != activePath) {
+            context.go(previousRoute);
+          } else {
+            context.go(AppRoutes.dashboard);
+          }
+          return;
+        }
+
+        final now = DateTime.now();
+        if (_lastBackPressTime == null ||
+            now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit app'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
           );
-        },
-      ),
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: mainScaffold,
     );
   }
 }
@@ -253,11 +348,13 @@ class _PortalDrawer extends ConsumerWidget {
     required this.isDrawer,
     required this.isCollapsed,
     required this.activePath,
+    this.onNavigate,
   });
 
   final bool isDrawer;
   final bool isCollapsed;
   final String activePath;
+  final void Function(String)? onNavigate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -340,6 +437,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.dashboard,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.dashboard),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Live Feed',
@@ -347,6 +445,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.liveFeed,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.liveFeed),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'History',
@@ -354,6 +453,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.vehicleMonitoring,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.vehicleMonitoring),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Vehicle Export',
@@ -361,6 +461,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.anprRecords,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.anprRecords),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Details Not Found',
@@ -368,6 +469,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.alerts,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.alerts),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Budget Page',
@@ -375,6 +477,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.analytics,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.analytics),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Settings',
@@ -382,6 +485,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.settings,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.settings),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Support Center',
@@ -389,6 +493,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.users,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.users),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Vehicle History',
@@ -396,6 +501,7 @@ class _PortalDrawer extends ConsumerWidget {
         route: AppRoutes.vehicleClassification,
         isCollapsed: isCollapsed,
         isActive: isRouteActive(AppRoutes.vehicleClassification),
+        onNavigate: onNavigate,
       ),
       _DrawerItem(
         label: 'Logout',
@@ -408,25 +514,16 @@ class _PortalDrawer extends ConsumerWidget {
     ];
 
     final content = Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: isDrawer
-            ? null
-            : const Border(
-                right: BorderSide(
-                  color: Color(0xFFE2ECEC),
-                  width: 1.0,
-                ),
-              ),
-      ),
+      color: Colors.white,
       child: Column(
         children: [
           header,
-          const Divider(color: Color(0xFFE2ECEC), height: 1),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: items,
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              itemCount: items.length,
+              itemBuilder: (context, index) => items[index],
             ),
           ),
         ],
@@ -451,6 +548,7 @@ class _DrawerItem extends StatelessWidget {
     required this.isCollapsed,
     required this.isActive,
     this.onTap,
+    this.onNavigate,
   });
 
   final String label;
@@ -459,6 +557,7 @@ class _DrawerItem extends StatelessWidget {
   final bool isCollapsed;
   final bool isActive;
   final VoidCallback? onTap;
+  final void Function(String)? onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -480,6 +579,8 @@ class _DrawerItem extends StatelessWidget {
               }
               if (onTap != null) {
                 onTap!();
+              } else if (onNavigate != null) {
+                onNavigate!(route);
               } else {
                 context.go(route);
               }
@@ -540,6 +641,8 @@ class _DrawerItem extends StatelessWidget {
             }
             if (onTap != null) {
               onTap!();
+            } else if (onNavigate != null) {
+              onNavigate!(route);
             } else {
               context.go(route);
             }

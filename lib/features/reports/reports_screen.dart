@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/utils/uppercase_formatter.dart';
 import '../../core/storage/secure_storage_service.dart';
 import 'reports_models.dart';
 import 'reports_repository.dart';
@@ -22,6 +23,7 @@ class ReportsScreen extends ConsumerStatefulWidget {
 
 class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  bool _showFilters = false;
   String _selectedCategory = 'All';
 
   @override
@@ -73,8 +75,14 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F6F6),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(reportsProvider);
+            await ref.read(reportsProvider.future);
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -142,6 +150,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   children: [
                     TextField(
                       controller: _searchController,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [UpperCaseTextFormatter()],
                       onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
                         hintText: 'Search report name or category...',
@@ -170,45 +180,116 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        ElevatedButton.icon(
-                          onPressed: () => _showExportSnackbar('PDF'),
-                          icon: const Icon(Icons.picture_as_pdf, size: 14, color: Colors.white),
-                          label: const Text('Export PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFDC2626),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: const Size(95, 34),
-                          ),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () => _showExportSnackbar('PDF'),
+                              icon: const Icon(Icons.picture_as_pdf, size: 14, color: Colors.white),
+                              label: const Text('Export PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFDC2626),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                minimumSize: const Size(95, 34),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => _showExportSnackbar('Excel'),
+                              icon: const Icon(Icons.table_chart, size: 14, color: Colors.white),
+                              label: const Text('Export Excel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF16A34A),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                minimumSize: const Size(100, 34),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => _showExportSnackbar('CSV'),
+                              icon: const Icon(Icons.grid_on, size: 14, color: Colors.white),
+                              label: const Text('Export CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0D9488),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                minimumSize: const Size(95, 34),
+                              ),
+                            ),
+                          ],
                         ),
-                        ElevatedButton.icon(
-                          onPressed: () => _showExportSnackbar('Excel'),
-                          icon: const Icon(Icons.table_chart, size: 14, color: Colors.white),
-                          label: const Text('Export Excel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF16A34A),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: const Size(100, 34),
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => _showExportSnackbar('CSV'),
-                          icon: const Icon(Icons.grid_on, size: 14, color: Colors.white),
-                          label: const Text('Export CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0D9488),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: const Size(95, 34),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _showFilters = !_showFilters),
+                          icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt, size: 16, color: const Color(0xFF0D9488)),
+                          label: Text(_showFilters ? 'Hide Filter' : 'Filter', style: const TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold, fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF0D9488)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           ),
                         ),
                       ],
                     ),
+                    if (_showFilters) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    initialValue: _selectedCategory,
+                                    decoration: InputDecoration(
+                                      labelText: 'Category Filter',
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                    ),
+                                    items: ['All', 'Traffic', 'Violations', 'Revenue', 'Certificates', 'Security']
+                                        .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12))))
+                                        .toList(),
+                                    onChanged: (val) {
+                                      if (val != null) setState(() => _selectedCategory = val);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final now = DateTime.now();
+                                      await showDateRangePicker(
+                                        context: context,
+                                        firstDate: DateTime(2020),
+                                        lastDate: now,
+                                        initialDateRange: null,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.calendar_today, size: 14, color: Color(0xFF0D9488)),
+                                    label: const Text('Select Date Range', style: TextStyle(fontSize: 12, color: Color(0xFF0D9488), fontWeight: FontWeight.bold)),
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(0, 42),
+                                      side: const BorderSide(color: Color(0xFF0D9488)),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -403,6 +484,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

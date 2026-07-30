@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import 'dashboard_models.dart';
 import 'models/missing_certificate_model.dart';
@@ -62,8 +63,8 @@ class DashboardRepository {
   }
 
   Map<String, String>? _getDateRange(String? timeRange) {
-    if (timeRange == 'Select All Time Range') {
-      return null;
+    if (timeRange == 'Select All Time Range' || timeRange == 'Custom') {
+      return null; // caller handles custom dates separately
     }
 
     final now = DateTime.now();
@@ -98,6 +99,8 @@ class DashboardRepository {
     String? zone,
     String? camera,
     String? timeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
   }) async {
     final Map<String, dynamic> body = {};
     if (district != null && district != 'Select All District') {
@@ -111,10 +114,19 @@ class DashboardRepository {
       body['cameraId'] = camera;
     }
 
-    final range = _getDateRange(timeRange);
-    if (range != null) {
-      body['startDate'] = range['startDate'];
-      body['endDate'] = range['endDate'];
+    String two(int n) => n >= 10 ? '$n' : '0$n';
+    String fmt(DateTime dt) =>
+        '${dt.year}-${two(dt.month)}-${two(dt.day)}T${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+
+    if (timeRange == 'Custom' && customStartDate != null && customEndDate != null) {
+      body['startDate'] = fmt(customStartDate);
+      body['endDate'] = fmt(DateTime(customEndDate.year, customEndDate.month, customEndDate.day, 23, 59, 59));
+    } else {
+      final range = _getDateRange(timeRange);
+      if (range != null) {
+        body['startDate'] = range['startDate'];
+        body['endDate'] = range['endDate'];
+      }
     }
 
     final response = await _apiClient.post<Map<String, dynamic>>(
@@ -171,6 +183,8 @@ class DashboardRepository {
     String? zone,
     String? camera,
     String? timeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
   }) async {
     final queryParameters = <String, dynamic>{};
     if (district != null && district != 'Select All District') {
@@ -184,10 +198,19 @@ class DashboardRepository {
       queryParameters['cameraId'] = camera;
     }
 
-    final range = _getDateRange(timeRange ?? 'Today');
-    if (range != null) {
-      queryParameters['startDate'] = range['startDate'];
-      queryParameters['endDate'] = range['endDate'];
+    String two(int n) => n >= 10 ? '$n' : '0$n';
+    String fmt(DateTime dt) =>
+        '${dt.year}-${two(dt.month)}-${two(dt.day)}T${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+
+    if (timeRange == 'Custom' && customStartDate != null && customEndDate != null) {
+      queryParameters['startDate'] = fmt(customStartDate);
+      queryParameters['endDate'] = fmt(DateTime(customEndDate.year, customEndDate.month, customEndDate.day, 23, 59, 59));
+    } else {
+      final range = _getDateRange(timeRange ?? 'Today');
+      if (range != null) {
+        queryParameters['startDate'] = range['startDate'];
+        queryParameters['endDate'] = range['endDate'];
+      }
     }
 
     final response = await _apiClient.get<Map<String, dynamic>>(
@@ -218,6 +241,8 @@ class DashboardRepository {
     String? zone,
     String? camera,
     String? timeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
   }) async {
     final Map<String, dynamic> body = {};
     if (district != null && district != 'Select All District') {
@@ -230,10 +255,20 @@ class DashboardRepository {
     if (camera != null && camera != 'Select All Camera') {
       body['cameraId'] = camera;
     }
-    final range = _getDateRange(timeRange);
-    if (range != null) {
-      body['startDate'] = range['startDate'];
-      body['endDate'] = range['endDate'];
+
+    String two(int n) => n >= 10 ? '$n' : '0$n';
+    String fmt(DateTime dt) =>
+        '${dt.year}-${two(dt.month)}-${two(dt.day)}T${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+
+    if (timeRange == 'Custom' && customStartDate != null && customEndDate != null) {
+      body['startDate'] = fmt(customStartDate);
+      body['endDate'] = fmt(DateTime(customEndDate.year, customEndDate.month, customEndDate.day, 23, 59, 59));
+    } else {
+      final range = _getDateRange(timeRange);
+      if (range != null) {
+        body['startDate'] = range['startDate'];
+        body['endDate'] = range['endDate'];
+      }
     }
 
     try {
@@ -269,10 +304,46 @@ class DashboardRepository {
     }
   }
 
-  Future<Map<String, double>> fetchMonthlyRevenue(int year) async {
+  Future<Map<String, double>> fetchMonthlyRevenue(
+    int year, {
+    String? district,
+    String? zone,
+    String? camera,
+    String? timeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
+  }) async {
+    final Map<String, dynamic> queryParameters = {};
+    if (district != null && district != 'Select All District') {
+      queryParameters['districtName'] = district;
+    }
+    if (zone != null && zone != 'Select All Zone') {
+      queryParameters['officeName'] = zone;
+      queryParameters['zone'] = zone;
+    }
+    if (camera != null && camera != 'Select All Camera') {
+      queryParameters['cameraId'] = camera;
+    }
+
+    String two(int n) => n >= 10 ? '$n' : '0$n';
+    String fmt(DateTime dt) =>
+        '${dt.year}-${two(dt.month)}-${two(dt.day)}T${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+
+    if (timeRange == 'Custom' && customStartDate != null && customEndDate != null) {
+      queryParameters['startDate'] = fmt(customStartDate);
+      queryParameters['endDate'] = fmt(DateTime(customEndDate.year, customEndDate.month, customEndDate.day, 23, 59, 59));
+    } else if (timeRange != null && timeRange != 'Select All Time Range') {
+      final range = _getDateRange(timeRange);
+      if (range != null) {
+        queryParameters['startDate'] = range['startDate'];
+        queryParameters['endDate'] = range['endDate'];
+      }
+    }
+
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/budget/revenue/monthly/$year',
+        queryParameters: queryParameters.isNotEmpty ? queryParameters : null,
       );
       final data = response.data?['data'] as Map<String, dynamic>? ?? {};
       final Map<String, double> revenue = {};
@@ -283,6 +354,69 @@ class DashboardRepository {
     } catch (e) {
       debugPrint('Error fetchMonthlyRevenue: $e');
       return {};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchChallanDetails({
+    required List<String> challanTypes,
+    String? districtName,
+    String? zoneName,
+    String? cameraId,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final now = DateTime.now();
+    String two(int n) => n >= 10 ? '$n' : '0$n';
+    final defaultStartDate = '${now.year}-${two(now.month)}-${two(now.day)}T00:00:00';
+    final defaultEndDate = '${now.year}-${two(now.month)}-${two(now.day)}T${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
+
+    final Map<String, dynamic> body = {
+      "districtName": (districtName != null && districtName != 'Select All District') ? districtName : "",
+      "zoneName": (zoneName != null && zoneName != 'Select All Zone') ? zoneName : "",
+      "cameraId": (cameraId != null && cameraId != 'Select All Camera') ? cameraId : "",
+      "startDate": (startDate != null && startDate.isNotEmpty) ? startDate : defaultStartDate,
+      "endDate": (endDate != null && endDate.isNotEmpty) ? endDate : defaultEndDate,
+      "challanTypes": challanTypes,
+    };
+
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/rta/getChallanDetails',
+        data: body,
+      );
+      final data = response.data?['data'];
+      if (data is List) {
+        return data.map((item) {
+          if (item is Map) return Map<String, dynamic>.from(item);
+          return <String, dynamic>{};
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('Error in fetchChallanDetails: $e');
+    }
+    return [];
+  }
+
+  Future<dynamic> generatePdf(String vcrNumber) async {
+    try {
+      final response = await _apiClient.post<dynamic>(
+        '/generatepdf',
+        data: {'vcrNumber': vcrNumber},
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return response.data;
+    } catch (e) {
+      debugPrint('Bytes PDF request failed, retrying standard response: $e');
+      try {
+        final response = await _apiClient.post<dynamic>(
+          '/generatepdf',
+          data: {'vcrNumber': vcrNumber},
+        );
+        return response.data;
+      } catch (err) {
+        debugPrint('Error generating PDF for $vcrNumber: $err');
+        rethrow;
+      }
     }
   }
 }

@@ -20,7 +20,12 @@ class AnprRecordsScreen extends ConsumerWidget {
     final recordsAsync = ref.watch(anprRecordsProvider);
 
     return Scaffold(
-      body: recordsAsync.when(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(anprRecordsProvider);
+          await ref.read(anprRecordsProvider.future);
+        },
+        child: recordsAsync.when(
         data: (records) {
           return Padding(
             padding: const EdgeInsets.all(20),
@@ -97,6 +102,7 @@ class AnprRecordsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text(error.toString())),
       ),
-    );
+    ),
+  );
   }
 }

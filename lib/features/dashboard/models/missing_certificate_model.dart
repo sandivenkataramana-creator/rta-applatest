@@ -42,7 +42,7 @@ class MissingCertificateModel {
       weightCertificateNotFound: json['weightCertificateNotFound'] ?? 0,
       insuranceCertificateNotFound: json['insuranceCertificateNotFound'] ?? 0,
       fitnessCertificateNotFound: json['fitnessCertificateNotFound'] ?? 0,
-      vehicleCountOverride: json['vehicleCount'] is int ? json['vehicleCount'] as int : null,
+      vehicleCountOverride: json['vehicleCount'] is num ? (json['vehicleCount'] as num).toInt() : null,
     );
   }
 
@@ -60,7 +60,7 @@ class MissingCertificateModel {
       }
     }
 
-    final int? vehicleCount = api['vehicleCount'] is int ? api['vehicleCount'] as int : null;
+    final int? vehicleCount = api['vehicleCount'] is num ? (api['vehicleCount'] as num).toInt() : null;
 
     return MissingCertificateModel(
       districtName: record['districtName'],
@@ -78,13 +78,9 @@ class MissingCertificateModel {
     );
   }
 
-    int get vehicleCount => vehicleCountOverride ?? (
-      allClearNotFound +
-      pucCertificateNotFound +
-      permitCertificateNotFound +
-      registrationCertificateNotFound +
-      roadTaxCertificateNotFound +
-      weightCertificateNotFound +
-      insuranceCertificateNotFound +
-      fitnessCertificateNotFound);
+  /// Returns the total vehicle count from the API.
+  /// Returns 0 when the API did not provide a vehicleCount field.
+  /// NOTE: We do NOT sum certificate categories here because a single vehicle
+  /// can have multiple missing certificates, which would produce a duplicate count.
+  int get vehicleCount => vehicleCountOverride ?? 0;
 }

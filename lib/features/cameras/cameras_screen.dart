@@ -20,7 +20,12 @@ class CamerasScreen extends ConsumerWidget {
     final asyncCameras = ref.watch(camerasProvider);
 
     return Scaffold(
-      body: asyncCameras.when(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(camerasProvider);
+          await ref.read(camerasProvider.future);
+        },
+        child: asyncCameras.when(
         data: (cameras) {
           return Padding(
             padding: const EdgeInsets.all(20),
@@ -107,6 +112,7 @@ class CamerasScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text(error.toString())),
       ),
-    );
+    ),
+  );
   }
 }

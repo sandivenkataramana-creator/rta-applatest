@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/widgets/loading_overlay.dart';
+import '../../core/utils/uppercase_formatter.dart';
 import '../../core/widgets/network_image_helper.dart';
 import '../../core/widgets/page_header_banner.dart';
+import '../../core/widgets/image_zoom_helper.dart';
 import 'alerts_state.dart';
 
 class AlertsScreen extends ConsumerStatefulWidget {
@@ -21,6 +23,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   bool _sortAscending = false;
   final TextEditingController _searchController = TextEditingController();
 
+  bool _showFilters = false;
   String _localDistrict = 'Select All District';
   String _localZone = 'Select All Zone';
   String _localCamera = 'Select All Camera';
@@ -154,7 +157,40 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                           child: Container(
                             color: Colors.black12,
                             child: imgUrl.isNotEmpty
-                                ? buildPlatformNetImage(imgUrl, fit: BoxFit.contain)
+                                ? InkWell(
+                                    onTap: () => showZoomedImageDialog(context, imgUrl),
+                                    child: Tooltip(
+                                      message: 'Click to zoom image',
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          buildPlatformNetImage(imgUrl, fit: BoxFit.contain),
+                                          Positioned(
+                                            bottom: 12,
+                                            right: 12,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withValues(alpha: 0.7),
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    'Click to zoom',
+                                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
                                 : const Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -259,8 +295,13 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       backgroundColor: const Color(0xFFF3F6F6),
       body: LoadingOverlay(
         isLoading: state.isLoading,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await notifier.fetchDetailsNotFound();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -273,7 +314,6 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                 decoration: const BoxDecoration(color: Color(0xFFF3F6F6)),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 950;
                     final districtDropdown = _buildDropdownField(
                       hint: 'Select District',
                       value: _localDistrict,
@@ -330,32 +370,74 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                       child: const Text('Apply Filters  →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     );
 
-                    if (isWide) {
-                      return Row(
-                        children: [
-                          Expanded(child: districtDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: zoneDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: cameraDropdown),
-                          const SizedBox(width: 12),
-                          applyButton,
-                        ],
-                      );
-                    } else {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          districtDropdown,
-                          const SizedBox(height: 8),
-                          zoneDropdown,
-                          const SizedBox(height: 8),
-                          cameraDropdown,
+                    final filterButton = OutlinedButton.icon(
+                      onPressed: () => setState(() => _showFilters = !_showFilters),
+                      icon: Icon(
+                        _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                        size: 18,
+                        color: const Color(0xFF0D9488),
+                      ),
+                      label: Text(
+                        _showFilters ? 'Hide Filter' : 'Filter',
+                        style: const TextStyle(
+                          color: Color(0xFF0D9488),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF0D9488)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                    );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: filterButton,
+                        ),
+                        if (_showFilters) ...[
                           const SizedBox(height: 12),
-                          applyButton,
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: districtDropdown),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: zoneDropdown),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(child: cameraDropdown),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: SizedBox(height: 42, child: applyButton)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
-                      );
-                    }
+                      ],
+                    );
                   },
                 ),
               ),
@@ -389,6 +471,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                     Expanded(
                       child: TextField(
                         controller: _searchController,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [UpperCaseTextFormatter()],
                         decoration: InputDecoration(
                           hintText: 'Search anything...',
                           prefixIcon: const Icon(Icons.search, size: 20),
@@ -571,7 +655,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildPaginationControls(int totalItems, int itemsPerPage, int totalPages) {

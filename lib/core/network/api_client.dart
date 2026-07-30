@@ -13,7 +13,7 @@ class ApiException implements Exception {
   final int code;
   final String message;
   @override
-  String toString() => 'ApiException($code): $message';
+  String toString() => message;
 }
 
 class ApiClient {
@@ -95,12 +95,14 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? data,
     Map<String, dynamic>? queryParameters,
+    Options? options,
   }) async {
     try {
       return await _dio.post<T>(
         path,
         data: data,
         queryParameters: queryParameters,
+        options: options,
       );
     } on DioException catch (e) {
       throw _mapDioError(e);
@@ -111,18 +113,41 @@ class ApiClient {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.sendTimeout ||
         e.type == DioExceptionType.receiveTimeout) {
-      return TimeoutException('Request timed out');
+      return ApiException(
+        code: 504,
+        message: 'Server request timed out. Please try again.',
+      );
     }
-    if (e.error is SocketException) {
-      return SocketException('No internet connection');
+
+    final rawMsg = e.message ?? e.error?.toString() ?? '';
+    final isConnectionErr = e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.unknown ||
+        e.error is SocketException ||
+        rawMsg.contains('XMLHttpRequest') ||
+        rawMsg.contains('connection errored') ||
+        rawMsg.contains('SocketException') ||
+        rawMsg.contains('Failed host lookup') ||
+        rawMsg.contains('Connection refused') ||
+        rawMsg.contains('NetworkError');
+
+    if (isConnectionErr && (e.response == null || e.response?.statusCode == null)) {
+      return ApiException(
+        code: 503,
+        message: 'Unable to connect to server. Please check your internet or server status and try again.',
+      );
     }
+
     final code = e.response?.statusCode ?? 0;
-    String message = 'Network error';
+    String message = 'Network error occurred';
     if (e.response?.data is Map && e.response?.data['message'] != null) {
       message = e.response!.data['message'].toString();
     } else if (code == 401 || code == 403) {
-      message = 'Invalid username or password.';
-    } else if (e.message != null) {
+      message = e.response?.data?['message']?.toString() ?? 'Invalid username or password';
+    } else if (code == 500 || code == 502 || code == 503 || code == 504) {
+      message = 'Server is currently unavailable ($code). Please try again later.';
+    } else if (rawMsg.contains('XMLHttpRequest') || rawMsg.contains('connection errored')) {
+      message = 'Unable to connect to server. Please check your internet or server status and try again.';
+    } else if (e.message != null && e.message!.isNotEmpty) {
       message = e.message.toString();
     }
     return ApiException(code: code, message: message);

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../core/utils/uppercase_formatter.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
@@ -180,7 +181,8 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
     }
   }
 
-  Future<void> fetchZonesForDistrict(String district) async {
+  /// Returns the auto-selected zone name when only 1 real zone exists, else null.
+  Future<String?> fetchZonesForDistrict(String district) async {
     state = state.copyWith(isLoading: true);
     try {
       final zonesList = await repository.fetchZones(district);
@@ -188,11 +190,16 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
         zones: zonesList,
         isLoading: false,
       );
+      // Auto-select if only one real zone
+      final realZones = zonesList.where((z) => z != 'Select All Zone').toList();
+      if (realZones.length == 1) return realZones.first;
+      return null;
     } catch (e) {
       state = state.copyWith(
         zones: const ['Select All Zone'],
         isLoading: false,
       );
+      return null;
     }
   }
 
@@ -291,6 +298,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
   final TextEditingController _searchController = TextEditingController();
 
   // Temporary local state for selected filters (applied on Submit)
+  bool _showFilters = false;
   String _localDistrict = 'Select All District';
   String _localZone = 'Select All Zone';
   String _localCamera = 'Select All Camera';
@@ -1486,7 +1494,18 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                             ),
                             OutlinedButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                _showDriverDetailsAndSignatureDialog(
+                                  context,
+                                  actionType: 'Collect Fine',
+                                  item: item,
+                                  selectedOffences: selectedOffences.toList(),
+                                  customOffences: customOffences,
+                                  totalChallanAmount: totalChallanAmount,
+                                  remarksText: remarksCtrl.text,
+                                  ref: ref,
+                                );
+                              },
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: Color(0xFF28A745)),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -1494,15 +1513,18 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                               child: const Text('Collect', style: TextStyle(color: Color(0xFF28A745), fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
-                            ElevatedButton(
+                             ElevatedButton(
                               onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Challan of ₹ ${totalChallanAmount.toStringAsFixed(2)} raised successfully!'),
-                                    backgroundColor: const Color(0xFF198754),
-                                  ),
+                                _showDriverDetailsAndSignatureDialog(
+                                  context,
+                                  actionType: 'Raise Challan',
+                                  item: item,
+                                  selectedOffences: selectedOffences.toList(),
+                                  customOffences: customOffences,
+                                  totalChallanAmount: totalChallanAmount,
+                                  remarksText: remarksCtrl.text,
+                                  ref: ref,
                                 );
-                                Navigator.of(context).pop();
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF198754),
@@ -1511,15 +1533,18 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                               child: const Text('Raise Challan', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
-                            ElevatedButton(
+                             ElevatedButton(
                               onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Vehicle has been seized!'),
-                                    backgroundColor: Color(0xFFDC3545),
-                                  ),
+                                _showDriverDetailsAndSignatureDialog(
+                                  context,
+                                  actionType: 'Seize Vehicle',
+                                  item: item,
+                                  selectedOffences: selectedOffences.toList(),
+                                  customOffences: customOffences,
+                                  totalChallanAmount: totalChallanAmount,
+                                  remarksText: remarksCtrl.text,
+                                  ref: ref,
                                 );
-                                Navigator.of(context).pop();
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFDC3545),
@@ -1744,12 +1769,38 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
       
       // District Filter
-      final matchesDistrict = state.selectedDistrict == 'Select All District' ||
-          vehicle['districtName'] == state.selectedDistrict;
+      bool matchesDistrict = state.selectedDistrict == 'Select All District' || state.selectedDistrict.isEmpty;
+      if (!matchesDistrict) {
+        final selDist = state.selectedDistrict.toLowerCase().trim();
+        final itemDists = [
+          vehicle['districtName']?.toString(),
+          vehicle['district']?.toString(),
+          vehicle['district_name']?.toString(),
+          item['districtName']?.toString(),
+          item['district']?.toString(),
+          item['district_name']?.toString(),
+        ].whereType<String>().map((s) => s.toLowerCase().trim());
+
+        matchesDistrict = itemDists.isEmpty || itemDists.any((d) => d == selDist || d.contains(selDist) || selDist.contains(d));
+      }
           
       // Zone Filter
-      final matchesZone = state.selectedZone == 'Select All Zone' ||
-          vehicle['zoneName'] == state.selectedZone;
+      bool matchesZone = state.selectedZone == 'Select All Zone' || state.selectedZone.isEmpty;
+      if (!matchesZone) {
+        final selZone = state.selectedZone.toLowerCase().trim();
+        final itemZones = [
+          vehicle['zoneName']?.toString(),
+          vehicle['officeName']?.toString(),
+          vehicle['zone']?.toString(),
+          vehicle['office']?.toString(),
+          item['zoneName']?.toString(),
+          item['officeName']?.toString(),
+          item['zone']?.toString(),
+          item['office']?.toString(),
+        ].whereType<String>().map((s) => s.toLowerCase().trim());
+
+        matchesZone = itemZones.isEmpty || itemZones.any((z) => z == selZone || z.contains(selZone) || selZone.contains(z));
+      }
           
       // Camera Filter
       final selectedCameraId = state.cameraLocationToId[state.selectedCamera];
@@ -1872,8 +1923,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 950;
-                    
                     final logo = InkWell(
                       onTap: () {
                         ref.read(sidebarCollapsedProvider.notifier).update((state) => !state);
@@ -1896,14 +1945,18 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                       hint: 'Select District',
                       value: _localDistrict,
                       options: state.districts,
-                      onChanged: (value) {
+                      onChanged: (value) async {
                         setState(() {
                           _localDistrict = value ?? 'Select All District';
                           _localZone = 'Select All Zone';
                           _localCamera = 'Select All Camera';
                         });
                         if (value != null && value != 'Select All District') {
-                          notifier.fetchZonesForDistrict(value);
+                          final autoZone = await notifier.fetchZonesForDistrict(value);
+                          if (autoZone != null && mounted) {
+                            setState(() => _localZone = autoZone);
+                            notifier.fetchCamerasForZone(autoZone);
+                          }
                         } else {
                           notifier.resetZones();
                         }
@@ -1978,42 +2031,85 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                       ),
                     );
 
-                    if (isWide) {
-                      return Row(
-                        children: [
-                          logo,
-                          const SizedBox(width: 16),
-                          Expanded(child: districtDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: zoneDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: cameraDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: vehicleTypeDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: violationTypeDropdown),
-                          const SizedBox(width: 12),
-                          submitButton,
-                        ],
-                      );
-                    } else {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          districtDropdown,
-                          const SizedBox(height: 8),
-                          zoneDropdown,
-                          const SizedBox(height: 8),
-                          cameraDropdown,
-                          const SizedBox(height: 8),
-                          vehicleTypeDropdown,
-                          const SizedBox(height: 8),
-                          violationTypeDropdown,
+                    final filterButton = OutlinedButton.icon(
+                      onPressed: () => setState(() => _showFilters = !_showFilters),
+                      icon: Icon(
+                        _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                        size: 18,
+                        color: const Color(0xFF0D9488),
+                      ),
+                      label: Text(
+                        _showFilters ? 'Hide Filter' : 'Filter',
+                        style: const TextStyle(
+                          color: Color(0xFF0D9488),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF0D9488)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                    );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            logo,
+                            filterButton,
+                          ],
+                        ),
+                        if (_showFilters) ...[
                           const SizedBox(height: 12),
-                          submitButton,
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: districtDropdown),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: zoneDropdown),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(child: cameraDropdown),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: vehicleTypeDropdown),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(child: violationTypeDropdown),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: SizedBox(height: 42, child: submitButton)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
-                      );
-                    }
+                      ],
+                    );
                   },
                 ),
               ),
@@ -2063,6 +2159,8 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                     Expanded(
                       child: TextField(
                         controller: _searchController,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [UpperCaseTextFormatter()],
                         decoration: InputDecoration(
                           hintText: 'Search anything...',
                           prefixIcon: const Icon(Icons.search, size: 20),
@@ -2079,7 +2177,16 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(vertical: 8),
                         ),
-                        onChanged: notifier.updateSearch,
+                        onChanged: (val) {
+                          final upper = val.toUpperCase();
+                          if (val != upper) {
+                            _searchController.value = TextEditingValue(
+                              text: upper,
+                              selection: TextSelection.collapsed(offset: upper.length),
+                            );
+                          }
+                          notifier.updateSearch(upper);
+                        },
                       ),
                     ),
                   ],
@@ -2391,8 +2498,18 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       backgroundColor: const Color(0xFFF3F6F6),
       body: LoadingOverlay(
         isLoading: state.isLoading,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            if (widget.isLiveFeed) {
+              await notifier.fetchViolations();
+              await notifier.fetchNotifications();
+            } else {
+              await notifier.fetchNotifications();
+            }
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2422,7 +2539,13 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           _localCamera = 'Select All Camera';
                         });
                         if (value != null && value != 'Select All District') {
-                          notifier.fetchZonesForDistrict(value);
+                          notifier.fetchZonesForDistrict(value).then((autoZone) {
+                            if (autoZone != null && mounted) {
+                              setState(() => _localZone = autoZone);
+                              notifier.fetchCamerasForZone(autoZone);
+                            }
+                          });
+
                         } else {
                           notifier.resetZones();
                         }
@@ -2832,7 +2955,8 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildHistoryPaginationControls(int totalItems, int itemsPerPage, int totalPages) {
@@ -3058,4 +3182,618 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Driver Details & Signature Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SignaturePainter extends CustomPainter {
+  _SignaturePainter(this.points);
+  final List<Offset?> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    for (int i = 0; i < points.length - 1; i++) {
+      if (points[i] != null && points[i + 1] != null) {
+        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SignaturePainter oldDelegate) => true;
+}
+
+void _showSignatureCaptureDialog(
+  BuildContext context, {
+  required void Function(List<Offset?> points) onSigned,
+}) {
+  final List<Offset?> points = [];
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSig) => AlertDialog(
+        title: const Text('Capture Signature', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: 400,
+          height: 220,
+          child: Column(
+            children: [
+              const Text('Draw signature below:', style: TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    setSig(() {
+                      final RenderBox box = ctx.findRenderObject() as RenderBox;
+                      points.add(box.globalToLocal(details.globalPosition));
+                    });
+                  },
+                  onPanEnd: (_) => setSig(() => points.add(null)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.white,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CustomPaint(
+                        painter: _SignaturePainter(List<Offset?>.from(points)),
+                        child: Container(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => setSig(() => points.clear()),
+            child: const Text('Clear', style: TextStyle(color: Colors.orange)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              onSigned(List<Offset?>.from(points));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
+            child: const Text('Confirm', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showDriverDetailsAndSignatureDialog(
+  BuildContext context, {
+  required String actionType,
+  required Map<String, dynamic> item,
+  required List<Map<String, dynamic>> selectedOffences,
+  required List<Map<String, dynamic>> customOffences,
+  required double totalChallanAmount,
+  required String remarksText,
+  required WidgetRef ref,
+}) {
+  final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+  final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'N/A';
+
+  // Form controllers
+  final licenseCtrl = TextEditingController();
+  final driverNameCtrl = TextEditingController();
+  final driverAgeCtrl = TextEditingController();
+  final officerNameCtrl = TextEditingController();
+  final officerBadgeCtrl = TextEditingController();
+  final placeCtrl = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+
+  List<Offset?> officerSignaturePoints = [];
+  List<Offset?> driverSignaturePoints = [];
+  bool isSubmitting = false;
+  String? submitError;
+
+  Color actionColor;
+  IconData actionIcon;
+  switch (actionType) {
+    case 'Seize Vehicle':
+      actionColor = const Color(0xFFDC3545);
+      actionIcon = Icons.car_crash;
+      break;
+    case 'Raise Challan':
+      actionColor = const Color(0xFF198754);
+      actionIcon = Icons.receipt_long;
+      break;
+    default: // Collect Fine
+      actionColor = const Color(0xFF28A745);
+      actionIcon = Icons.payments_outlined;
+  }
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlgState) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Header ──────────────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: actionColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(actionIcon, color: Colors.white, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Driver Details & Signature',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          actionType,
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => Navigator.of(ctx).pop(),
+                        child: const Icon(Icons.close, color: Colors.white, size: 20),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Body ────────────────────────────────────────────────
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Vehicle info row
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0F4FF),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFBBCCF0)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.directions_car, color: Color(0xFF0F3260), size: 20),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Vehicle Number', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                                    Text(vehicleNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F3260))),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    const Text('Total Amount', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                                    Text('₹ ${totalChallanAmount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: actionColor)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Driver Details Section
+                          _buildSectionHeader('Driver Details', Icons.person_outline, const Color(0xFF0F3260)),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (_, constraints) {
+                              final isMobile = constraints.maxWidth < 480;
+                              final licenseField = TextFormField(
+                                controller: licenseCtrl,
+                                textCapitalization: TextCapitalization.characters,
+                                inputFormatters: [UpperCaseTextFormatter()],
+                                decoration: _inputDecoration('License No. (E.g. TS0123456789012)', Icons.badge_outlined),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter license number' : null,
+                              );
+                              final nameField = TextFormField(
+                                controller: driverNameCtrl,
+                                decoration: _inputDecoration('Driver Name', Icons.person_outline),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter driver name' : null,
+                              );
+                              final ageField = TextFormField(
+                                controller: driverAgeCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputDecoration('Driver Age', Icons.cake_outlined),
+                              );
+                              if (isMobile) {
+                                return Column(children: [
+                                  licenseField,
+                                  const SizedBox(height: 12),
+                                  nameField,
+                                  const SizedBox(height: 12),
+                                  ageField,
+                                ]);
+                              }
+                              return Column(children: [
+                                licenseField,
+                                const SizedBox(height: 12),
+                                Row(children: [
+                                  Expanded(child: nameField),
+                                  const SizedBox(width: 12),
+                                  SizedBox(width: 130, child: ageField),
+                                ]),
+                              ]);
+                            },
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Officer Details Section
+                          _buildSectionHeader('Officer Details', Icons.local_police_outlined, const Color(0xFF0F3260)),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (_, constraints) {
+                              final isMobile = constraints.maxWidth < 480;
+                              final officerNameField = TextFormField(
+                                controller: officerNameCtrl,
+                                decoration: _inputDecoration('Officer Name', Icons.badge_outlined),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter officer name' : null,
+                              );
+                              final badgeField = TextFormField(
+                                controller: officerBadgeCtrl,
+                                textCapitalization: TextCapitalization.characters,
+                                inputFormatters: [UpperCaseTextFormatter()],
+                                decoration: _inputDecoration('Badge No.', Icons.numbers_outlined),
+                              );
+                              final placeField = TextFormField(
+                                controller: placeCtrl,
+                                textCapitalization: TextCapitalization.characters,
+                                inputFormatters: [UpperCaseTextFormatter()],
+                                decoration: _inputDecoration('Place / Location', Icons.location_on_outlined),
+                              );
+                              if (isMobile) {
+                                return Column(children: [
+                                  officerNameField,
+                                  const SizedBox(height: 12),
+                                  badgeField,
+                                  const SizedBox(height: 12),
+                                  placeField,
+                                ]);
+                              }
+                              return Column(children: [
+                                Row(children: [
+                                  Expanded(child: officerNameField),
+                                  const SizedBox(width: 12),
+                                  SizedBox(width: 140, child: badgeField),
+                                ]),
+                                const SizedBox(height: 12),
+                                placeField,
+                              ]);
+                            },
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Signatures Section
+                          _buildSectionHeader('Signatures', Icons.draw_outlined, const Color(0xFF0F3260)),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (_, constraints) {
+                              final isMobile = constraints.maxWidth < 480;
+
+                              Widget officerSigBox = _buildSignatureBox(
+                                label: 'Officer Signature',
+                                points: officerSignaturePoints,
+                                onCapture: () => _showSignatureCaptureDialog(
+                                  ctx,
+                                  onSigned: (pts) => setDlgState(() => officerSignaturePoints = pts),
+                                ),
+                                onClear: () => setDlgState(() => officerSignaturePoints = []),
+                              );
+                              Widget driverSigBox = _buildSignatureBox(
+                                label: 'Driver / Owner Signature',
+                                points: driverSignaturePoints,
+                                onCapture: () => _showSignatureCaptureDialog(
+                                  ctx,
+                                  onSigned: (pts) => setDlgState(() => driverSignaturePoints = pts),
+                                ),
+                                onClear: () => setDlgState(() => driverSignaturePoints = []),
+                              );
+
+                              if (isMobile) {
+                                return Column(children: [
+                                  officerSigBox,
+                                  const SizedBox(height: 12),
+                                  driverSigBox,
+                                ]);
+                              }
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: officerSigBox),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: driverSigBox),
+                                ],
+                              );
+                            },
+                          ),
+
+                          if (submitError != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3CD),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFFEEBA)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.warning_amber, color: Color(0xFF856404), size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(submitError!, style: const TextStyle(color: Color(0xFF856404), fontSize: 12))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // ── Footer ──────────────────────────────────────────────
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: isSubmitting ? null : () => Navigator.of(ctx).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        icon: isSubmitting
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.send, size: 16),
+                        label: Text(isSubmitting ? 'Submitting...' : 'Generate Manual Challan'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: actionColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                setDlgState(() {
+                                  isSubmitting = true;
+                                  submitError = null;
+                                });
+                                try {
+                                  final storage = SecureStorageService();
+                                  final apiClient = ApiClient(storage);
+                                  final repo = VehicleMonitoringRepository(apiClient: apiClient);
+
+                                  // Compose offences list
+                                  final offenceNames = [
+                                    ...selectedOffences.map((o) => o['name']?.toString() ?? o['offence']?.toString() ?? ''),
+                                    ...customOffences.map((o) => o['name']?.toString() ?? ''),
+                                  ].where((s) => s.isNotEmpty).join(',');
+
+                                  // 1. Save VCR
+                                  final vcrData = {
+                                    'registrationNumber': vehicleNumber,
+                                    'offences': offenceNames,
+                                    'challanAmount': totalChallanAmount,
+                                    'driverLicenseNumber': licenseCtrl.text.trim(),
+                                    'driverName': driverNameCtrl.text.trim(),
+                                    'driverAge': driverAgeCtrl.text.trim(),
+                                    'officerName': officerNameCtrl.text.trim(),
+                                    'officerBadgeNumber': officerBadgeCtrl.text.trim(),
+                                    'place': placeCtrl.text.trim(),
+                                    'challanType': actionType == 'Seize Vehicle' ? 'SEIZE' : (actionType == 'Raise Challan' ? 'RAISE' : 'COLLECT'),
+                                    'remarks': remarksText,
+                                  };
+                                  final vcrResult = await repo.saveVcr(vcrData);
+                                  final vcrNumber = vcrResult['vcrNumber']?.toString() ?? vcrResult['id']?.toString() ?? '';
+
+                                  // 2. Add challan
+                                  if (vcrNumber.isNotEmpty) {
+                                    await repo.addChallan({
+                                      'vcrNumber': vcrNumber,
+                                      'challanAmount': totalChallanAmount,
+                                      'challanType': vcrData['challanType'],
+                                      'registrationNumber': vehicleNumber,
+                                    });
+                                  }
+
+                                  // 3. Save driver signature (fire & forget)
+                                  if (driverSignaturePoints.isNotEmpty && vcrNumber.isNotEmpty) {
+                                    final sigStr = driverSignaturePoints
+                                        .where((p) => p != null)
+                                        .map((p) => '${p!.dx.toStringAsFixed(1)},${p.dy.toStringAsFixed(1)}')
+                                        .join(';');
+                                    repo.saveDriverSign(vcrNumber: vcrNumber, driverSign: sigStr).ignore();
+                                  }
+
+                                  if (ctx.mounted) Navigator.of(ctx).pop();
+                                  if (context.mounted) Navigator.of(context).pop();
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '${actionType == 'Seize Vehicle' ? 'Vehicle seized' : 'Challan generated'} successfully!'
+                                          '${vcrNumber.isNotEmpty ? ' VCR #$vcrNumber' : ''}',
+                                        ),
+                                        backgroundColor: actionColor,
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: const Duration(seconds: 4),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setDlgState(() {
+                                    isSubmitting = false;
+                                    submitError = 'Failed to submit: ${e.toString()}';
+                                  });
+                                }
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Widget _buildSectionHeader(String title, IconData icon, Color color) {
+  return Row(
+    children: [
+      Icon(icon, color: color, size: 16),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13),
+      ),
+      const SizedBox(width: 8),
+      Expanded(child: Divider(color: color.withValues(alpha: 0.3))),
+    ],
+  );
+}
+
+InputDecoration _inputDecoration(String hint, IconData icon) {
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(fontSize: 12),
+    prefixIcon: Icon(icon, size: 18, color: Colors.grey),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFF0F3260), width: 1.5),
+    ),
+    filled: true,
+    fillColor: Colors.white,
+  );
+}
+
+Widget _buildSignatureBox({
+  required String label,
+  required List<Offset?> points,
+  required VoidCallback onCapture,
+  required VoidCallback onClear,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+      color: const Color(0xFFF9F9F9),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0F3260))),
+        const SizedBox(height: 8),
+        if (points.isNotEmpty)
+          Container(
+            height: 100,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: CustomPaint(
+                painter: _SignaturePainter(points),
+                child: Container(),
+              ),
+            ),
+          )
+        else
+          Container(
+            height: 100,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Center(
+              child: Text('No signature captured', style: TextStyle(color: Colors.black38, fontSize: 12)),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (points.isNotEmpty)
+              TextButton.icon(
+                onPressed: onClear,
+                icon: const Icon(Icons.clear, size: 14),
+                label: const Text('Clear', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(foregroundColor: Colors.red, padding: EdgeInsets.zero),
+              ),
+            const SizedBox(width: 4),
+            ElevatedButton.icon(
+              onPressed: onCapture,
+              icon: const Icon(Icons.draw, size: 14),
+              label: Text(points.isEmpty ? 'Capture' : 'Redo', style: const TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F3260),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }

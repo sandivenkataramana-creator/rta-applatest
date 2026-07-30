@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/api_client.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../core/widgets/loading_overlay.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_notifier.dart';
@@ -17,7 +19,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _rememberMe = true;
+  bool _rememberMe = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
@@ -39,8 +41,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         context.go(AppRoutes.dashboard);
       }
     } catch (error) {
+      String msg = error.toString();
+      if (msg.contains('ApiException')) {
+        msg = msg.replaceAll(RegExp(r'ApiException\(\d+\):\s*'), '');
+      }
+      if (msg.contains('XMLHttpRequest') ||
+          msg.contains('connection errored') ||
+          msg.contains('SocketException') ||
+          msg.contains('Failed host lookup') ||
+          msg.contains('NetworkError') ||
+          msg.contains('Connection failed') ||
+          msg.contains('Connection refused')) {
+        msg = 'Unable to connect to server. Please check your internet or server status and try again.';
+      }
       setState(() {
-        _errorMessage = error.toString();
+        _errorMessage = msg.isEmpty ? 'Invalid username or password' : msg;
       });
     } finally {
       if (mounted) {
@@ -525,9 +540,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                                     activeColor: const Color(0xFF0D9488),
                                                     checkColor: Colors.white,
                                                     side: const BorderSide(color: Colors.white, width: 1.5),
-                                                    onChanged: (value) => setState(
-                                                      () => _rememberMe = value ?? true,
-                                                    ),
+                                                    onChanged: (value) {
+                                                      setState(() {
+                                                        _rememberMe = value ?? false;
+                                                      });
+                                                    },
                                                     shape: RoundedRectangleBorder(
                                                       borderRadius: BorderRadius.circular(4),
                                                     ),
@@ -550,7 +567,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         ),
                                         const SizedBox(width: 8),
                                         TextButton(
-                                          onPressed: () {},
+                                          onPressed: () => _showForgotPasswordConfirmDialog(context),
                                           style: TextButton.styleFrom(
                                             padding: EdgeInsets.zero,
                                             minimumSize: Size.zero,
@@ -655,6 +672,341 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Forgot Password Flow ───────────────────────────────────────────────────
+
+  void _showForgotPasswordConfirmDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF29C7D0), width: 3),
+                ),
+                child: const Center(
+                  child: Text(
+                    'i',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF29C7D0),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Reset Password',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D3748),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'We will send a one-time OTP to your registered email address.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF718096),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _showForgotPasswordEmailDialog(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6C63FF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Continue',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF9E9E9E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showForgotPasswordEmailDialog(BuildContext context) {
+    final emailController = TextEditingController();
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D4A3A),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Reset Password',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.close, color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Enter your registered email to receive a one-time OTP.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Registered Email',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: const TextStyle(color: Colors.black87, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Enter your email',
+                    hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
+                    prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF9E9E9E), size: 20),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFD4A800), width: 1.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFD4A800), width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFD4A800), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: isSending
+                        ? null
+                        : () async {
+                            final email = emailController.text.trim();
+                            if (email.isEmpty) return;
+                            setDialogState(() => isSending = true);
+                            try {
+                              final api = ApiClient(SecureStorageService());
+                              await api.post<Map<String, dynamic>>(
+                                '/auth/forgot-password/request',
+                                data: {'email': email},
+                              );
+                              if (ctx.mounted) {
+                                Navigator.of(ctx).pop();
+                              }
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('OTP sent! Please check your email.'),
+                                    backgroundColor: Color(0xFF0D9488),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                Navigator.of(ctx).pop();
+                              }
+                              if (context.mounted) {
+                                _showForgotPasswordErrorDialog(
+                                  context,
+                                  e.toString(),
+                                );
+                              }
+                            } finally {
+                              if (ctx.mounted) {
+                                setDialogState(() => isSending = false);
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: isSending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Send OTP',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showForgotPasswordErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFE88080), width: 3),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.close,
+                    size: 36,
+                    color: Color(0xFFE88080),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Unable to continue',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D3748),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF718096),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _showForgotPasswordEmailDialog(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C63FF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -10,6 +10,8 @@ class BudgetState {
     this.selectedZone = 'Select All Zone',
     this.selectedCamera = 'Select All Camera',
     this.selectedTimeRange = 'Select All Time Range',
+    this.customStartDate,
+    this.customEndDate,
     this.summary = const {},
     this.violations = const {},
     this.monthlyRevenue = const {},
@@ -21,6 +23,8 @@ class BudgetState {
   final String selectedZone;
   final String selectedCamera;
   final String selectedTimeRange;
+  final DateTime? customStartDate;
+  final DateTime? customEndDate;
   final Map<String, dynamic> summary;
   final Map<String, dynamic> violations;
   final Map<String, double> monthlyRevenue;
@@ -32,6 +36,8 @@ class BudgetState {
     String? selectedZone,
     String? selectedCamera,
     String? selectedTimeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
     Map<String, dynamic>? summary,
     Map<String, dynamic>? violations,
     Map<String, double>? monthlyRevenue,
@@ -43,6 +49,8 @@ class BudgetState {
       selectedZone: selectedZone ?? this.selectedZone,
       selectedCamera: selectedCamera ?? this.selectedCamera,
       selectedTimeRange: selectedTimeRange ?? this.selectedTimeRange,
+      customStartDate: customStartDate ?? this.customStartDate,
+      customEndDate: customEndDate ?? this.customEndDate,
       summary: summary ?? this.summary,
       violations: violations ?? this.violations,
       monthlyRevenue: monthlyRevenue ?? this.monthlyRevenue,
@@ -64,86 +72,138 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
     String? zone,
     String? camera,
     String? timeRange,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
   }) async {
     state = state.copyWith(
       selectedDistrict: district ?? state.selectedDistrict,
       selectedZone: zone ?? state.selectedZone,
       selectedCamera: camera ?? state.selectedCamera,
       selectedTimeRange: timeRange ?? state.selectedTimeRange,
+      customStartDate: customStartDate,
+      customEndDate: customEndDate,
     );
+  }
+
+  Map<String, String>? _getDateRange(String? timeRange) {
+    if (timeRange == null || timeRange == 'Select All Time Range' || timeRange == 'Custom') {
+      return null;
+    }
+    final now = DateTime.now();
+    DateTime start;
+    DateTime end = now;
+
+    if (timeRange == 'Yesterday') {
+      final y = now.subtract(const Duration(days: 1));
+      start = DateTime(y.year, y.month, y.day, 0, 0, 0);
+      end = DateTime(y.year, y.month, y.day, 23, 59, 59);
+    } else if (timeRange == 'Last 7 Days' || timeRange == 'This Week') {
+      start = now.subtract(const Duration(days: 7));
+    } else if (timeRange == 'Monthly' || timeRange == 'This Month') {
+      start = DateTime(now.year, now.month, 1);
+    } else if (timeRange == 'This Year') {
+      start = DateTime(now.year, 1, 1);
+    } else {
+      // 'Today' or default
+      start = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    }
+
+    String two(int n) => n >= 10 ? '$n' : '0$n';
+    String format(DateTime dt) =>
+        '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+
+    return {
+      'startDate': format(start),
+      'endDate': format(end),
+    };
   }
 
   Future<void> applyFilters() async {
     state = state.copyWith(isLoading: true);
     try {
+      String two(int n) => n >= 10 ? '$n' : '0$n';
+      String fmt(DateTime dt) =>
+          '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+
+      String startDateStr = '';
+      String endDateStr = '';
+
+      if (state.selectedTimeRange == 'Custom' && state.customStartDate != null && state.customEndDate != null) {
+        startDateStr = fmt(state.customStartDate!);
+        endDateStr = fmt(DateTime(state.customEndDate!.year, state.customEndDate!.month, state.customEndDate!.day, 23, 59, 59));
+      } else {
+        final range = _getDateRange(state.selectedTimeRange);
+        if (range != null) {
+          startDateStr = range['startDate']!;
+          endDateStr = range['endDate']!;
+        } else {
+          final now = DateTime.now();
+          startDateStr = '${now.year}-${two(now.month)}-${two(now.day)} 00:00:00';
+          endDateStr = fmt(now);
+        }
+      }
+
+      final dist = (state.selectedDistrict.startsWith('Select') || state.selectedDistrict.isEmpty)
+          ? ''
+          : state.selectedDistrict;
+      final zone = (state.selectedZone.startsWith('Select') || state.selectedZone.isEmpty)
+          ? ''
+          : state.selectedZone;
+      final cam = (state.selectedCamera.startsWith('Select') || state.selectedCamera.isEmpty)
+          ? ''
+          : state.selectedCamera;
+
       final payload = {
-        'cameraId': state.selectedCamera.startsWith('Select') ? '' : state.selectedCamera,
-        'districtName': state.selectedDistrict.startsWith('Select') ? '' : state.selectedDistrict,
-        'endDate': '2026-07-10 23:59:59',
-        'startDate': '2026-07-10 00:00:00',
-        'zoneName': state.selectedZone.startsWith('Select') ? '' : state.selectedZone,
+        'cameraId': cam,
+        'districtName': dist,
+        'endDate': endDateStr,
+        'startDate': startDateStr,
+        'zoneName': zone,
+        'officeName': zone,
       };
 
-      // Summary API
+      // 1. Summary API
       Map<String, dynamic> summaryData = {};
       try {
         summaryData = await repository.fetchBudgetSummary(payload);
+        final dataMap = summaryData['data'];
+        if (dataMap is Map<String, dynamic>) {
+          summaryData = dataMap;
+        }
       } catch (_) {}
-      if (summaryData.isEmpty) {
-        summaryData = {
-          "totalAmount": 3612950.0,
-          "manualAmount": 0.0,
-          "pendingAmount": 0.0,
-          "totalChallans": 40946,
-          "manualChallanCount": 0,
-          "pendingChallanCount": 0,
-          "echallanAmount": 3612950.0,
-          "echallanCount": 40946
-        };
-      }
 
-      // Violations API
+      // 2. Violations API
       Map<String, dynamic> violationsData = {};
       try {
         violationsData = await repository.fetchBudgetViolations(payload);
+        final dataMap = violationsData['data'];
+        if (dataMap is Map<String, dynamic>) {
+          violationsData = dataMap;
+        }
       } catch (_) {}
-      if (violationsData.isEmpty) {
-        violationsData = {
-          "fitnessAmount": 65700.0,
-          "permitAmount": 23500.0,
-          "roadTaxAmount": 133500.0,
-          "insuranceAmount": 2692950.0,
-          "pucAmount": 357600.0,
-          "registrationAmount": 51100.0,
-          "totalViolationRevenue": 3324350.0
-        };
-      }
 
-      // Monthly Revenue Chart API
+      // 3. Monthly Revenue Chart API
       Map<String, double> monthlyData = {};
       try {
-        final rawMonthly = await repository.fetchMonthlyRevenue(2026);
+        final queryMap = <String, dynamic>{};
+        if (dist.isNotEmpty) queryMap['districtName'] = dist;
+        if (zone.isNotEmpty) {
+          queryMap['officeName'] = zone;
+          queryMap['zone'] = zone;
+        }
+        if (cam.isNotEmpty) queryMap['cameraId'] = cam;
+        if (startDateStr.isNotEmpty) queryMap['startDate'] = startDateStr;
+        if (endDateStr.isNotEmpty) queryMap['endDate'] = endDateStr;
+
+        final rawMonthly = await repository.fetchMonthlyRevenue(
+          DateTime.now().year,
+          queryParameters: queryMap.isNotEmpty ? queryMap : null,
+        );
         final rawData = rawMonthly['data'] as Map<String, dynamic>? ?? {};
         rawData.forEach((key, value) {
           monthlyData[key] = (value as num? ?? 0.0).toDouble();
         });
       } catch (_) {}
-      if (monthlyData.isEmpty) {
-        monthlyData = {
-          "1": 0.0,
-          "2": 0.0,
-          "3": 0.0,
-          "4": 0.0,
-          "5": 280526074.0,
-          "6": 430435215.0,
-          "7": 68826550.0,
-          "8": 0.0,
-          "9": 0.0,
-          "10": 0.0,
-          "11": 0.0,
-          "12": 0.0,
-        };
-      }
 
       state = state.copyWith(
         summary: summaryData,

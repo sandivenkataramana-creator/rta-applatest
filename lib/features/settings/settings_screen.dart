@@ -323,9 +323,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               color: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               clipBehavior: Clip.antiAlias,
-                              child: SingleChildScrollView(
-                                padding: const EdgeInsets.all(16),
-                                child: _buildMainContent(state),
+                              child: RefreshIndicator(
+                                onRefresh: () async {
+                                  await notifier.loadData();
+                                },
+                                child: SingleChildScrollView(
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.all(16),
+                                  child: _buildMainContent(state),
+                                ),
                               ),
                             ),
                           ),
