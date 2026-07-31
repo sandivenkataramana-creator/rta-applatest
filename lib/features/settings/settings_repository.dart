@@ -92,12 +92,14 @@ class SettingsRepository {
   }
 
   Future<List<dynamic>> fetchOffices(String districtName) async {
-    final response = await _apiClient.get<List<dynamic>>('/rtaOffices/$districtName');
+    final encoded = Uri.encodeComponent(districtName);
+    final response = await _apiClient.get<List<dynamic>>('/rtaOffices/$encoded');
     return response.data ?? [];
   }
 
   Future<List<dynamic>> fetchCameras(String officeName) async {
-    final response = await _apiClient.get<List<dynamic>>('/camera/$officeName');
+    final encoded = Uri.encodeComponent(officeName);
+    final response = await _apiClient.get<List<dynamic>>('/camera/$encoded');
     return response.data ?? [];
   }
 

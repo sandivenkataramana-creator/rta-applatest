@@ -43,6 +43,7 @@ class VehicleMonitoringRepository {
       if (zoneName != null &&
           zoneName.isNotEmpty &&
           zoneName != 'Select All Zone') {
+        queryParams['zoneName'] = zoneName;
         queryParams['officeName'] = zoneName;
         queryParams['zone'] = zoneName;
       }
@@ -79,15 +80,67 @@ class VehicleMonitoringRepository {
     return [];
   }
 
-  Future<List<dynamic>> fetchNotifications({int pageNumber = 1, int limit = 100}) async {
-    final response = await _apiClient.get<List<dynamic>>(
-      '/notifications',
-      queryParameters: {
+  Future<List<dynamic>> fetchNotifications({
+    String? violationType,
+    String? districtName,
+    String? zoneName,
+    String? cameraId,
+    String? vehicleType,
+    int pageNumber = 1,
+    int limit = 100,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
         'pageNumber': pageNumber,
         'limit': limit,
-      },
-    );
-    return response.data ?? [];
+      };
+
+      if (violationType != null &&
+          violationType.isNotEmpty &&
+          violationType != 'Select All Violation Type') {
+        queryParams['violationType'] = violationType;
+      }
+      if (districtName != null &&
+          districtName.isNotEmpty &&
+          districtName != 'Select All District') {
+        queryParams['districtName'] = districtName;
+      }
+      if (zoneName != null &&
+          zoneName.isNotEmpty &&
+          zoneName != 'Select All Zone') {
+        queryParams['zoneName'] = zoneName;
+        queryParams['officeName'] = zoneName;
+        queryParams['zone'] = zoneName;
+      }
+      if (cameraId != null &&
+          cameraId.isNotEmpty &&
+          cameraId != 'Select All Camera') {
+        queryParams['cameraId'] = cameraId;
+      }
+      if (vehicleType != null &&
+          vehicleType.isNotEmpty &&
+          vehicleType != 'Select All Vehicle Type') {
+        queryParams['vehicleType'] = vehicleType;
+      }
+
+      final response = await _apiClient.get<dynamic>(
+        '/notifications',
+        queryParameters: queryParams,
+      );
+
+      final raw = response.data;
+      if (raw is List) {
+        return raw;
+      } else if (raw is Map) {
+        if (raw['data'] is List) return raw['data'] as List<dynamic>;
+        if (raw['content'] is List) return raw['content'] as List<dynamic>;
+        if (raw['notifications'] is List) return raw['notifications'] as List<dynamic>;
+        if (raw['result'] is List) return raw['result'] as List<dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Error in fetchNotifications: $e');
+    }
+    return [];
   }
 
   Future<List<String>> fetchDistricts() async {

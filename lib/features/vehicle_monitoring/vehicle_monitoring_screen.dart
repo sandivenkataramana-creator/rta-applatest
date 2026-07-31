@@ -8,7 +8,6 @@ import '../../core/utils/uppercase_formatter.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/widgets/loading_overlay.dart';
-import '../../core/widgets/responsive_scaffold.dart'; // import sidebarCollapsedProvider
 import '../../core/widgets/page_header_banner.dart';
 import '../../core/widgets/network_image_helper.dart';
 import '../../core/widgets/image_zoom_helper.dart';
@@ -152,10 +151,26 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
     }
   }
 
-  Future<void> fetchNotifications({int pageNumber = 1, int limit = 100}) async {
+  Future<void> fetchNotifications({
+    String? violationType,
+    String? districtName,
+    String? zoneName,
+    String? cameraId,
+    String? vehicleType,
+    int pageNumber = 1,
+    int limit = 100,
+  }) async {
     state = state.copyWith(isLoading: true);
     try {
-      final results = await repository.fetchNotifications(pageNumber: pageNumber, limit: limit);
+      final results = await repository.fetchNotifications(
+        violationType: violationType,
+        districtName: districtName,
+        zoneName: zoneName,
+        cameraId: cameraId,
+        vehicleType: vehicleType,
+        pageNumber: pageNumber,
+        limit: limit,
+      );
       state = state.copyWith(notifications: results, isLoading: false);
     } catch (error) {
       state = state.copyWith(error: error.toString(), isLoading: false);
@@ -299,6 +314,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
 
   // Temporary local state for selected filters (applied on Submit)
   bool _showFilters = false;
+  bool _showHistoryFilters = false;
   String _localDistrict = 'Select All District';
   String _localZone = 'Select All Zone';
   String _localCamera = 'Select All Camera';
@@ -382,72 +398,35 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     );
   }
 
-  void _showNotificationHistoryDetailsDialog(BuildContext context, String vehicleNumber) {
-    final historyRecords = [
-      {
-        'id': '2733379',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 24, 2026, 3:55:41 PM',
-        'status': 'GRACE PERIOD',
-      },
-      {
-        'id': '2693131',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 24, 2026, 11:09:29 AM',
-        'status': 'GRACE PERIOD',
-      },
-      {
-        'id': '2266606',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 13, 2026, 5:46:48 PM',
-        'status': 'GRACE PERIOD',
-      },
-      {
-        'id': '2024298',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 6, 2026, 12:56:46 PM',
-        'status': 'GRACE PERIOD',
-      },
-      {
-        'id': '1992201',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 4, 2026, 9:27:40 AM',
-        'status': 'GRACE PERIOD',
-      },
-      {
-        'id': '1878613',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 3, 2026, 9:51:26 AM',
-        'status': 'GRACE PERIOD',
-      },
-      {
-        'id': '1794162',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jul 2, 2026, 1:53:43 PM',
-        'status': 'DUPLICATE',
-      },
-      {
-        'id': '1739122',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '250.00',
-        'dateTime': 'Jul 2, 2026, 7:42:46 AM',
-        'status': 'UNPAID',
-      },
-      {
-        'id': '1450740',
-        'notification': 'PUC_CERTIFICATEMissing ROAD_TAX_CERTIFICATE expired on 2026-03-31',
-        'amount': '0.00',
-        'dateTime': 'Jun 29, 2026, 3:29:01 PM',
-        'status': 'GRACE PERIOD',
-      },
-    ];
+  void _showNotificationHistoryDetailsDialog(BuildContext context, String vehicleNumber, VehicleMonitoringState state) {
+    final cleanVehicleNo = vehicleNumber.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+
+    // Extract live history records for this specific vehicle from state.violations & state.notifications
+    final List<Map<String, String>> historyRecords = [];
+
+    final allSources = [...state.violations, ...state.notifications];
+    for (final item in allSources) {
+      if (item is Map<String, dynamic>) {
+        final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+        final vNo = (vehicle['vehicleNumber'] ?? item['vehicleNumber'] ?? '').toString().replaceAll(RegExp(r'\s+'), '').toUpperCase();
+
+        if (cleanVehicleNo.isNotEmpty && vNo.contains(cleanVehicleNo)) {
+          final id = item['id']?.toString() ?? item['notificationId']?.toString() ?? item['violationId']?.toString() ?? 'N/A';
+          final notification = item['offence']?.toString() ?? item['violationType']?.toString() ?? item['remarks']?.toString() ?? item['notification']?.toString() ?? 'Violation Record';
+          final amount = (item['amount'] ?? item['fineAmount'] ?? item['challanAmount'] ?? '0.00').toString();
+          final dateTime = _formatDateTime(item['createdTime']?.toString() ?? item['dateTime']?.toString() ?? vehicle['imageDetectionTime']?.toString());
+          final status = (item['status'] ?? item['paymentStatus'] ?? 'UNPAID').toString().toUpperCase();
+
+          historyRecords.add({
+            'id': id,
+            'notification': notification,
+            'amount': amount,
+            'dateTime': dateTime,
+            'status': status,
+          });
+        }
+      }
+    }
 
     showDialog(
       context: context,
@@ -499,12 +478,30 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                   ),
                 ),
 
-                // Table Body
+                // Table Body / Empty State
                 Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    padding: const EdgeInsets.all(12),
-                    child: SingleChildScrollView(
+                  child: historyRecords.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No previous VCR reports found for $vehicleNumber',
+                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          padding: const EdgeInsets.all(12),
+                          child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 780),
@@ -1195,7 +1192,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                 padding: const EdgeInsets.all(4),
                                                 child: Center(
                                                   child: OutlinedButton(
-                                                    onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber),
+                                                    onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber, state),
                                                     style: OutlinedButton.styleFrom(
                                                       side: const BorderSide(color: Color(0xFF0D9488)),
                                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1484,7 +1481,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               child: const Text('Close', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber),
+                              onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber, state),
                               icon: const Icon(Icons.description, size: 16, color: Colors.black87),
                               label: const Text('Previous VCR Reports', style: TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold)),
                               style: OutlinedButton.styleFrom(
@@ -1779,9 +1776,13 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           item['districtName']?.toString(),
           item['district']?.toString(),
           item['district_name']?.toString(),
-        ].whereType<String>().map((s) => s.toLowerCase().trim());
+        ].whereType<String>().map((s) => s.toLowerCase().trim()).toList();
 
-        matchesDistrict = itemDists.isEmpty || itemDists.any((d) => d == selDist || d.contains(selDist) || selDist.contains(d));
+        if (itemDists.isEmpty) {
+          matchesDistrict = true;
+        } else {
+          matchesDistrict = itemDists.any((d) => d == selDist || d.contains(selDist) || selDist.contains(d));
+        }
       }
           
       // Zone Filter
@@ -1797,9 +1798,13 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           item['officeName']?.toString(),
           item['zone']?.toString(),
           item['office']?.toString(),
-        ].whereType<String>().map((s) => s.toLowerCase().trim());
+        ].whereType<String>().map((s) => s.toLowerCase().trim()).toList();
 
-        matchesZone = itemZones.isEmpty || itemZones.any((z) => z == selZone || z.contains(selZone) || selZone.contains(z));
+        if (itemZones.isEmpty) {
+          matchesZone = true;
+        } else {
+          matchesZone = itemZones.any((z) => z == selZone || z.contains(selZone) || selZone.contains(z));
+        }
       }
           
       // Camera Filter
@@ -1845,7 +1850,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           hasFlagMatch = vehicle['allClear'] == true;
         }
 
-        matchesViolation = hasTextMatch || hasFlagMatch || true;
+        matchesViolation = hasTextMatch || hasFlagMatch;
       }
       
       // Search Box Filter
@@ -1910,209 +1915,190 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              PageHeaderBanner(
-                title: widget.isLiveFeed ? 'Live Vehicle Feed' : 'Vehicle Monitoring & History',
-                subtitle: widget.isLiveFeed ? 'Real-time Automatic Number Plate Recognition Stream' : 'Government of Telangana Transport Department',
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: PageHeaderBanner(
+                      title: widget.isLiveFeed ? 'Live Vehicle Feed' : 'Vehicle Monitoring & History',
+                      subtitle: widget.isLiveFeed ? 'Real-time Automatic Number Plate Recognition Stream' : 'Government of Telangana Transport Department',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final newShow = !_showFilters;
+                      setState(() => _showFilters = newShow);
+                      notifier.fetchViolations();
+                    },
+                    icon: Icon(
+                      _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                      size: 18,
+                      color: const Color(0xFF0D9488),
+                    ),
+                    label: Text(
+                      _showFilters ? 'Hide Filter' : 'Filter',
+                      style: const TextStyle(
+                        color: Color(0xFF0D9488),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF0D9488)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              // Top Cascading Filters Container
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F6F6),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final logo = InkWell(
-                      onTap: () {
-                        ref.read(sidebarCollapsedProvider.notifier).update((state) => !state);
-                      },
-                      child: Tooltip(
-                        message: 'Toggle Sidebar',
-                        child: Image.asset(
-                          'assets/images/telangana_logo.png',
-                          height: 35,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.account_balance,
-                            color: Color(0xFF0D9488),
-                            size: 24,
+              if (_showFilters) ...[
+                const SizedBox(height: 12),
+                // Top Cascading Filters Container
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F6F6),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final districtDropdown = _buildDropdownField(
+                        hint: 'Select District',
+                        value: _localDistrict,
+                        options: state.districts,
+                        onChanged: (value) async {
+                          setState(() {
+                            _localDistrict = value ?? 'Select All District';
+                            _localZone = 'Select All Zone';
+                            _localCamera = 'Select All Camera';
+                          });
+                          if (value != null && value != 'Select All District') {
+                            final autoZone = await notifier.fetchZonesForDistrict(value);
+                            if (autoZone != null && mounted) {
+                              setState(() => _localZone = autoZone);
+                              notifier.fetchCamerasForZone(autoZone);
+                            }
+                          } else {
+                            notifier.resetZones();
+                          }
+                          notifier.resetCameras();
+                        },
+                      );
+
+                      final zoneDropdown = _buildDropdownField(
+                        hint: 'Select Zone',
+                        value: _localZone,
+                        options: state.zones,
+                        onChanged: (value) {
+                          setState(() {
+                            _localZone = value ?? 'Select All Zone';
+                            _localCamera = 'Select All Camera';
+                          });
+                          if (value != null && value != 'Select All Zone') {
+                            notifier.fetchCamerasForZone(value);
+                          } else {
+                            notifier.resetCameras();
+                          }
+                        },
+                      );
+
+                      final cameraDropdown = _buildDropdownField(
+                        hint: 'Select Camera',
+                        value: _localCamera,
+                        options: state.cameras,
+                        onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
+                      );
+
+                      final vehicleTypeDropdown = _buildDropdownField(
+                        hint: 'Select Vehicle Type',
+                        value: _localVehicleType,
+                        options: vehicleTypes,
+                        onChanged: (value) => setState(() => _localVehicleType = value ?? 'Select All Vehicle Type'),
+                      );
+
+                      final violationTypeDropdown = _buildDropdownField(
+                        hint: 'Select Violation Type',
+                        value: _localViolationType,
+                        options: violationTypes,
+                        onChanged: (value) => setState(() => _localViolationType = value ?? 'Select All Violation Type'),
+                      );
+
+                      final submitButton = FilledButton(
+                        onPressed: () {
+                          notifier.updateSelectedFilters(
+                            district: _localDistrict,
+                            zone: _localZone,
+                            camera: _localCamera,
+                            vehicleType: _localVehicleType,
+                            violationType: _localViolationType,
+                          );
+                          setState(() {
+                            _currentPage = 1;
+                          });
+                          notifier.fetchViolations();
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D9488),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        ),
+                        child: const Text(
+                          'Submit',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                    );
+                      );
 
-                    final districtDropdown = _buildDropdownField(
-                      hint: 'Select District',
-                      value: _localDistrict,
-                      options: state.districts,
-                      onChanged: (value) async {
-                        setState(() {
-                          _localDistrict = value ?? 'Select All District';
-                          _localZone = 'Select All Zone';
-                          _localCamera = 'Select All Camera';
-                        });
-                        if (value != null && value != 'Select All District') {
-                          final autoZone = await notifier.fetchZonesForDistrict(value);
-                          if (autoZone != null && mounted) {
-                            setState(() => _localZone = autoZone);
-                            notifier.fetchCamerasForZone(autoZone);
-                          }
-                        } else {
-                          notifier.resetZones();
-                        }
-                        notifier.resetCameras();
-                      },
-                    );
-
-                    final zoneDropdown = _buildDropdownField(
-                      hint: 'Select Zone',
-                      value: _localZone,
-                      options: state.zones,
-                      onChanged: (value) {
-                        setState(() {
-                          _localZone = value ?? 'Select All Zone';
-                          _localCamera = 'Select All Camera';
-                        });
-                        if (value != null && value != 'Select All Zone') {
-                          notifier.fetchCamerasForZone(value);
-                        } else {
-                          notifier.resetCameras();
-                        }
-                      },
-                    );
-
-                    final cameraDropdown = _buildDropdownField(
-                      hint: 'Select Camera',
-                      value: _localCamera,
-                      options: state.cameras,
-                      onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
-                    );
-
-                    final vehicleTypeDropdown = _buildDropdownField(
-                      hint: 'Select Vehicle Type',
-                      value: _localVehicleType,
-                      options: vehicleTypes,
-                      onChanged: (value) => setState(() => _localVehicleType = value ?? 'Select All Vehicle Type'),
-                    );
-
-                    final violationTypeDropdown = _buildDropdownField(
-                      hint: 'Select Violation Type',
-                      value: _localViolationType,
-                      options: violationTypes,
-                      onChanged: (value) => setState(() => _localViolationType = value ?? 'Select All Violation Type'),
-                    );
-
-                    final submitButton = FilledButton(
-                      onPressed: () {
-                        notifier.updateSelectedFilters(
-                          district: _localDistrict,
-                          zone: _localZone,
-                          camera: _localCamera,
-                          vehicleType: _localVehicleType,
-                          violationType: _localViolationType,
-                        );
-                        setState(() {
-                          _currentPage = 1;
-                        });
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      ),
-                      child: const Text(
-                        'Submit',
-                        style: TextStyle(
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
                           color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                      ),
-                    );
-
-                    final filterButton = OutlinedButton.icon(
-                      onPressed: () => setState(() => _showFilters = !_showFilters),
-                      icon: Icon(
-                        _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
-                        size: 18,
-                        color: const Color(0xFF0D9488),
-                      ),
-                      label: Text(
-                        _showFilters ? 'Hide Filter' : 'Filter',
-                        style: const TextStyle(
-                          color: Color(0xFF0D9488),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF0D9488)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      ),
-                    );
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
                           children: [
-                            logo,
-                            filterButton,
+                            Row(
+                              children: [
+                                Expanded(child: districtDropdown),
+                                const SizedBox(width: 12),
+                                Expanded(child: zoneDropdown),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(child: cameraDropdown),
+                                const SizedBox(width: 12),
+                                Expanded(child: vehicleTypeDropdown),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(child: violationTypeDropdown),
+                                const SizedBox(width: 12),
+                                Expanded(child: SizedBox(height: 42, child: submitButton)),
+                              ],
+                            ),
                           ],
                         ),
-                        if (_showFilters) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: districtDropdown),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: zoneDropdown),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Expanded(child: cameraDropdown),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: vehicleTypeDropdown),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Expanded(child: violationTypeDropdown),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: SizedBox(height: 42, child: submitButton)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 16),
 
               // Sub-header Live indicator + Search Container
@@ -2449,15 +2435,71 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
 
     final dataSource = state.notifications;
 
-    // Client-side search filter
+    // Client-side search & dropdown filters
     final searchLower = _searchController.text.toLowerCase();
     final filtered = dataSource.where((item) {
       final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-      if (searchLower.isEmpty) return true;
-      final plateMatch = vehicle['vehicleNumber']?.toString().toLowerCase().contains(searchLower) ?? false;
-      final cameraMatch = vehicle['cameraName']?.toString().toLowerCase().contains(searchLower) ?? false;
-      final remarksMatch = item['remarks']?.toString().toLowerCase().contains(searchLower) ?? false;
-      return plateMatch || cameraMatch || remarksMatch;
+
+      // District Filter
+      bool matchesDistrict = _localDistrict == 'Select All District' || _localDistrict.isEmpty;
+      if (!matchesDistrict) {
+        final selDist = _localDistrict.toLowerCase().trim();
+        final itemDists = [
+          vehicle['districtName']?.toString(),
+          vehicle['district']?.toString(),
+          vehicle['district_name']?.toString(),
+          item['districtName']?.toString(),
+          item['district']?.toString(),
+          item['district_name']?.toString(),
+        ].whereType<String>().map((s) => s.toLowerCase().trim()).toList();
+
+        if (itemDists.isEmpty) {
+          matchesDistrict = true;
+        } else {
+          matchesDistrict = itemDists.any((d) => d == selDist || d.contains(selDist) || selDist.contains(d));
+        }
+      }
+
+      // Zone Filter
+      bool matchesZone = _localZone == 'Select All Zone' || _localZone.isEmpty;
+      if (!matchesZone) {
+        final selZone = _localZone.toLowerCase().trim();
+        final itemZones = [
+          vehicle['zoneName']?.toString(),
+          vehicle['officeName']?.toString(),
+          vehicle['zone']?.toString(),
+          vehicle['office']?.toString(),
+          item['zoneName']?.toString(),
+          item['officeName']?.toString(),
+          item['zone']?.toString(),
+          item['office']?.toString(),
+        ].whereType<String>().map((s) => s.toLowerCase().trim()).toList();
+
+        if (itemZones.isEmpty) {
+          matchesZone = true;
+        } else {
+          matchesZone = itemZones.any((z) => z == selZone || z.contains(selZone) || selZone.contains(z));
+        }
+      }
+
+      // Camera Filter
+      final selectedCameraId = state.cameraLocationToId[_localCamera];
+      bool matchesCamera = _localCamera == 'Select All Camera' || _localCamera.isEmpty;
+      if (!matchesCamera) {
+        matchesCamera = vehicle['cameraID'] == selectedCameraId ||
+            (vehicle['cameraName']?.toString().toLowerCase().contains(_localCamera.toLowerCase()) ?? false);
+      }
+
+      // Search Box Filter
+      bool matchesSearch = searchLower.isEmpty;
+      if (!matchesSearch) {
+        final plateMatch = vehicle['vehicleNumber']?.toString().toLowerCase().contains(searchLower) ?? false;
+        final cameraMatch = vehicle['cameraName']?.toString().toLowerCase().contains(searchLower) ?? false;
+        final remarksMatch = item['remarks']?.toString().toLowerCase().contains(searchLower) ?? false;
+        matchesSearch = plateMatch || cameraMatch || remarksMatch;
+      }
+
+      return matchesDistrict && matchesZone && matchesCamera && matchesSearch;
     }).toList();
 
     // Sort
@@ -2504,7 +2546,11 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
               await notifier.fetchViolations();
               await notifier.fetchNotifications();
             } else {
-              await notifier.fetchNotifications();
+              await notifier.fetchNotifications(
+                districtName: _localDistrict,
+                zoneName: _localZone,
+                cameraId: _localCamera,
+              );
             }
           },
           child: SingleChildScrollView(
@@ -2513,133 +2559,177 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const PageHeaderBanner(
-                title: 'Vehicle Monitoring & History',
-                subtitle: 'Government of Telangana Transport Department',
-              ),
-              const SizedBox(height: 16),
-              // Top Filter Bar
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F6F6),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 950;
-
-                    final districtDropdown = _buildDropdownField(
-                      hint: 'Select District',
-                      value: _localDistrict,
-                      options: state.districts,
-                      onChanged: (value) {
-                        setState(() {
-                          _localDistrict = value ?? 'Select All District';
-                          _localZone = 'Select All Zone';
-                          _localCamera = 'Select All Camera';
-                        });
-                        if (value != null && value != 'Select All District') {
-                          notifier.fetchZonesForDistrict(value).then((autoZone) {
-                            if (autoZone != null && mounted) {
-                              setState(() => _localZone = autoZone);
-                              notifier.fetchCamerasForZone(autoZone);
-                            }
-                          });
-
-                        } else {
-                          notifier.resetZones();
-                        }
-                        notifier.resetCameras();
-                      },
-                    );
-
-                    final zoneDropdown = _buildDropdownField(
-                      hint: 'Select Zone',
-                      value: _localZone,
-                      options: state.zones,
-                      onChanged: (value) {
-                        setState(() {
-                          _localZone = value ?? 'Select All Zone';
-                          _localCamera = 'Select All Camera';
-                        });
-                        if (value != null && value != 'Select All Zone') {
-                          notifier.fetchCamerasForZone(value);
-                        } else {
-                          notifier.resetCameras();
-                        }
-                      },
-                    );
-
-                    final cameraDropdown = _buildDropdownField(
-                      hint: 'Select Camera',
-                      value: _localCamera,
-                      options: state.cameras,
-                      onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
-                    );
-
-                    final timeRangeDropdown = _buildDropdownField(
-                      hint: 'Select Time Range',
-                      value: _localTimeRange,
-                      options: timeRangeOptions,
-                      onChanged: (value) => setState(() => _localTimeRange = value ?? 'Select All Time Range'),
-                    );
-
-                    final applyButton = FilledButton(
-                      onPressed: () {
-                        setState(() {
-                          _currentPage = 1;
-                        });
-                        notifier.fetchNotifications();
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      ),
-                      child: const Text(
-                        'Apply Filters  →',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    );
-
-                    if (isWide) {
-                      return Row(
-                        children: [
-                          Expanded(child: districtDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: zoneDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: cameraDropdown),
-                          const SizedBox(width: 8),
-                          Expanded(child: timeRangeDropdown),
-                          const SizedBox(width: 12),
-                          applyButton,
-                        ],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Expanded(
+                    child: PageHeaderBanner(
+                      title: 'Vehicle Monitoring & History',
+                      subtitle: 'Government of Telangana Transport Department',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final newShow = !_showHistoryFilters;
+                      setState(() => _showHistoryFilters = newShow);
+                      notifier.fetchNotifications(
+                        districtName: _localDistrict,
+                        zoneName: _localZone,
+                        cameraId: _localCamera,
                       );
-                    } else {
+                    },
+                    icon: Icon(
+                      _showHistoryFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                      size: 18,
+                      color: const Color(0xFF0D9488),
+                    ),
+                    label: Text(
+                      _showHistoryFilters ? 'Hide Filter' : 'Filter',
+                      style: const TextStyle(
+                        color: Color(0xFF0D9488),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF0D9488)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+              if (_showHistoryFilters) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final districtDropdown = _buildDropdownField(
+                        hint: 'Select District',
+                        value: _localDistrict,
+                        options: state.districts,
+                        onChanged: (value) {
+                          setState(() {
+                            _localDistrict = value ?? 'Select All District';
+                            _localZone = 'Select All Zone';
+                            _localCamera = 'Select All Camera';
+                          });
+                          if (value != null && value != 'Select All District') {
+                            notifier.fetchZonesForDistrict(value).then((autoZone) {
+                              if (autoZone != null && mounted) {
+                                setState(() => _localZone = autoZone);
+                                notifier.fetchCamerasForZone(autoZone);
+                              }
+                            });
+                          } else {
+                            notifier.resetZones();
+                          }
+                          notifier.resetCameras();
+                        },
+                      );
+
+                      final zoneDropdown = _buildDropdownField(
+                        hint: 'Select Zone',
+                        value: _localZone,
+                        options: state.zones,
+                        onChanged: (value) {
+                          setState(() {
+                            _localZone = value ?? 'Select All Zone';
+                            _localCamera = 'Select All Camera';
+                          });
+                          if (value != null && value != 'Select All Zone') {
+                            notifier.fetchCamerasForZone(value);
+                          } else {
+                            notifier.resetCameras();
+                          }
+                        },
+                      );
+
+                      final cameraDropdown = _buildDropdownField(
+                        hint: 'Select Camera',
+                        value: _localCamera,
+                        options: state.cameras,
+                        onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
+                      );
+
+                      final timeRangeDropdown = _buildDropdownField(
+                        hint: 'Select Time Range',
+                        value: _localTimeRange,
+                        options: timeRangeOptions,
+                        onChanged: (value) => setState(() => _localTimeRange = value ?? 'Select All Time Range'),
+                      );
+
+                      final applyButton = FilledButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _currentPage = 1;
+                          });
+                          notifier.fetchNotifications(
+                            districtName: _localDistrict,
+                            zoneName: _localZone,
+                            cameraId: _localCamera,
+                          );
+                        },
+                        icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                        label: const Text(
+                          'Apply Filters',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D9488),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                      );
+
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          districtDropdown,
-                          const SizedBox(height: 8),
-                          zoneDropdown,
-                          const SizedBox(height: 8),
-                          cameraDropdown,
-                          const SizedBox(height: 8),
-                          timeRangeDropdown,
+                          Row(
+                            children: [
+                              Expanded(child: districtDropdown),
+                              const SizedBox(width: 12),
+                              Expanded(child: zoneDropdown),
+                            ],
+                          ),
                           const SizedBox(height: 12),
-                          applyButton,
+                          Row(
+                            children: [
+                              Expanded(child: cameraDropdown),
+                              const SizedBox(width: 12),
+                              Expanded(child: timeRangeDropdown),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: applyButton,
+                          ),
                         ],
                       );
-                    }
-                  },
+                    },
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 16),
 
               // Historical badge + Search bar
@@ -2728,9 +2818,9 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         clipBehavior: Clip.antiAlias,
                         child: Column(
                           children: [
-                            // Table Header
+                            // Table Header (Navy Blue Background)
                             Container(
-                              color: Colors.white,
+                              color: const Color(0xFF0F3260),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               child: Row(
                                 children: [
@@ -2738,23 +2828,12 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                   _buildTableHeader('Vehicle', 'VehicleNumber', flex: 2),
                                   _buildTableHeader('Type', 'VehicleType', flex: 2),
                                   _buildTableHeader('Camera', 'Camera', flex: 3),
-                                  Expanded(
+                                  const Expanded(
                                     flex: 4,
                                     child: Text(
                                       'Violation',
                                       style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Text(
-                                      'Status',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
+                                        color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
@@ -2762,7 +2841,26 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                   ),
                                   const Expanded(
                                     flex: 2,
-                                    child: SizedBox(),
+                                    child: Text(
+                                      'Status',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Action',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
                                 ],
                               ),

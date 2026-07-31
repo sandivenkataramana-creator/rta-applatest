@@ -19,7 +19,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _rememberMe = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
@@ -35,7 +34,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await controller.login(
         _usernameController.text.trim(),
         _passwordController.text,
-        _rememberMe,
+        false,
       );
       if (mounted) {
         context.go(AppRoutes.dashboard);
@@ -522,50 +521,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                     const SizedBox(height: 18),
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        Flexible(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Theme(
-                                                data: Theme.of(context).copyWith(
-                                                  unselectedWidgetColor: Colors.white,
-                                                ),
-                                                child: SizedBox(
-                                                  width: 20,
-                                                  height: 20,
-                                                  child: Checkbox(
-                                                    value: _rememberMe,
-                                                    activeColor: const Color(0xFF0D9488),
-                                                    checkColor: Colors.white,
-                                                    side: const BorderSide(color: Colors.white, width: 1.5),
-                                                    onChanged: (value) {
-                                                      setState(() {
-                                                        _rememberMe = value ?? false;
-                                                      });
-                                                    },
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              const Flexible(
-                                                child: Text(
-                                                  'Remember Me',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 13,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
                                         TextButton(
                                           onPressed: () => _showForgotPasswordConfirmDialog(context),
                                           style: TextButton.styleFrom(

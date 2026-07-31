@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +9,7 @@ import '../../core/utils/uppercase_formatter.dart';
 import '../../core/widgets/network_image_helper.dart';
 import '../../core/widgets/page_header_banner.dart';
 import '../../core/widgets/image_zoom_helper.dart';
+import '../../core/utils/pdf_helper.dart';
 import 'vehicle_history_state.dart';
 
 class VehicleClassificationScreen extends ConsumerStatefulWidget {
@@ -476,76 +479,90 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
         });
       }
     }
+    return list;
+  }
 
-    if (list.isEmpty && state.vehicleDetail != null) {
-      final vehicle = state.vehicleDetail!;
-      final keys = ['pucCertificate', 'insurance', 'roadTax', 'permit', 'fitnessCertificate', 'registration'];
-      final labels = ['PUC Certificate', 'Insurance Certificate', 'Road Tax', 'Permit Certificate', 'Fitness Certificate', 'Registration Certificate'];
-      final Set<String> addedOffences = {};
+  Future<void> _downloadVehicleReport(BuildContext context, VehicleHistoryState state) async {
+    final vehicleNo = state.searchText.isEmpty ? 'Vehicle' : state.searchText;
+    final vehicle = state.vehicleDetail ?? {};
+    final challans = _getChallansList(state);
+    final history = state.searchResults;
 
-      for (int i = 0; i < keys.length; i++) {
-        final key = keys[i];
-        if (vehicle[key] == false) {
-          final amount = _getChallanAmountForOffence(key, state.offenceConfigs);
-          final label = labels[i];
-          list.add({
-            'offence': label,
-            'amount': amount,
-            'status': 'PENDING',
-            'date': _formatDateTime(vehicle['createdTime']?.toString()),
-          });
-          addedOffences.add(label.toUpperCase());
-          switch (key) {
-            case 'pucCertificate': addedOffences.add('PUC_CERTIFICATE'); break;
-            case 'insurance': addedOffences.add('INSURANCE_CERTIFICATE'); break;
-            case 'roadTax': addedOffences.add('ROAD_TAX_CERTIFICATE'); break;
-            case 'permit': addedOffences.add('PERMITTED_CERTIFICATE'); break;
-            case 'fitnessCertificate': addedOffences.add('FITNESS_CERTIFICATE'); break;
-            case 'registration': addedOffences.add('REGISTRATION_CERTIFICATE'); break;
-          }
-        }
-      }
+    final StringBuffer csv = StringBuffer();
+    csv.writeln('TELANGANA ANPR PORTAL - VEHICLE HISTORY REPORT');
+    csv.writeln('Generated Date,${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now())}');
+    csv.writeln('Vehicle Number,"$vehicleNo"');
+    csv.writeln();
 
-      // Check for other active offences dynamically by matching remarks / notification text in search results
-      final firstRecord = state.searchResults.isNotEmpty ? state.searchResults.first as Map<String, dynamic>? : null;
-      if (firstRecord != null) {
-        final remarks = (firstRecord['remarks']?.toString() ?? '').toLowerCase();
-        final notification = (firstRecord['notification']?.toString() ?? '').toLowerCase();
+    // 1. VEHICLE DETAILS
+    csv.writeln('--- VEHICLE DETAILS ---');
+    csv.writeln('Field,Value');
+    csv.writeln('Owner Name,"${vehicle['ownerName'] ?? 'N/A'}"');
+    csv.writeln('Vehicle Category,"${_deriveVehicleType(vehicle)}"');
+    csv.writeln('Fuel Type,"${vehicle['fuelType'] ?? 'N/A'}"');
+    csv.writeln('Vehicle Class,"${vehicle['vehicleClass'] ?? 'N/A'}"');
+    csv.writeln('Maker & Model,"${vehicle['makerName'] ?? 'N/A'} ${vehicle['makerModel'] ?? ''}"');
+    csv.writeln('Registration Date,"${_formatDateTime(vehicle['regDate']?.toString())}"');
+    csv.writeln('Engine Number,"${vehicle['engineNumber'] ?? 'N/A'}"');
+    csv.writeln('Chassis Number,"${vehicle['chassisNumber'] ?? 'N/A'}"');
+    csv.writeln();
 
-        for (final config in state.offenceConfigs) {
-          if (config is! Map) continue;
-          final offenceName = config['offence']?.toString() ?? '';
-          if (offenceName.isEmpty) continue;
+    // 2. DOCUMENT STATUS
+    csv.writeln('--- DOCUMENT STATUS ---');
+    csv.writeln('Document,Status,Expiry Date');
+    final docList = [
+      {'name': 'Registration', 'status': vehicle['registration'] == true ? 'Valid' : 'N/A', 'date': vehicle['regDate']},
+      {'name': 'Fitness', 'status': vehicle['fitnessCertificate'] == true ? 'Valid' : 'N/A', 'date': vehicle['fitnessDate']},
+      {'name': 'Insurance', 'status': vehicle['insurance'] == true ? 'Valid' : 'N/A', 'date': vehicle['insuranceDate']},
+      {'name': 'PUC', 'status': vehicle['pucCertificate'] == true ? 'Valid' : 'N/A', 'date': vehicle['pucDate']},
+      {'name': 'Tax', 'status': vehicle['roadTax'] == true ? 'Valid' : 'N/A', 'date': vehicle['roadTaxDate']},
+      {'name': 'Permit', 'status': vehicle['permit'] == true ? 'Valid' : 'N/A', 'date': vehicle['permitDate']},
+    ];
+    for (final doc in docList) {
+      csv.writeln('${doc['name']},${doc['status']},"${_formatDateTime(doc['date']?.toString())}"');
+    }
+    csv.writeln();
 
-          final offenceUpper = offenceName.toUpperCase();
-          if (addedOffences.contains(offenceUpper)) continue;
-
-          final cleanName = offenceUpper
-              .replaceAll('_', ' ')
-              .replaceAll('CERTIFICATE', '')
-              .trim()
-              .toLowerCase();
-
-          if (cleanName.isNotEmpty && (remarks.contains(cleanName) || notification.contains(cleanName))) {
-            final double amount = double.tryParse(config['challanAmount']?.toString() ?? '0.0') ?? 0.0;
-            final formattedLabel = offenceName
-                .replaceAll('_', ' ')
-                .split(' ')
-                .map((str) => str.isNotEmpty ? '${str[0].toUpperCase()}${str.substring(1).toLowerCase()}' : '')
-                .join(' ');
-
-            list.add({
-              'offence': formattedLabel,
-              'amount': amount,
-              'status': 'PENDING',
-              'date': _formatDateTime(vehicle['createdTime']?.toString()),
-            });
-            addedOffences.add(offenceUpper);
-          }
-        }
+    // 3. ACTIVE CHALLANS
+    csv.writeln('--- ACTIVE CHALLANS ---');
+    csv.writeln('Offence,Amount,Status,Date');
+    if (challans.isEmpty) {
+      csv.writeln('No active challans found,,,');
+    } else {
+      for (final c in challans) {
+        csv.writeln('"${c['offence']}",₹${c['amount']},"${c['status']}","${c['date']}"');
       }
     }
-    return list;
+    csv.writeln();
+
+    // 4. DETECTION HISTORY
+    csv.writeln('--- ANPR DETECTION HISTORY ---');
+    csv.writeln('S.No,Timestamp,Location / Zone,Camera,Violation / Remarks');
+    if (history.isEmpty) {
+      csv.writeln('No detection records found,,,,');
+    } else {
+      for (int i = 0; i < history.length; i++) {
+        final item = history[i] is Map<String, dynamic> ? history[i] as Map<String, dynamic> : <String, dynamic>{};
+        final date = _formatDateTime(item['insertTs']?.toString() ?? item['createdTime']?.toString());
+        final location = item['officeName']?.toString() ?? item['zoneName']?.toString() ?? item['location']?.toString() ?? 'N/A';
+        final camera = item['cameraLocation']?.toString() ?? item['cameraID']?.toString() ?? 'N/A';
+        final remarks = item['remarks']?.toString() ?? item['notification']?.toString() ?? 'N/A';
+        csv.writeln('${i + 1},"$date","$location","$camera","$remarks"');
+      }
+    }
+
+    final bytes = Uint8List.fromList(utf8.encode(csv.toString()));
+    final filename = 'vehicle_history_${vehicleNo.replaceAll(RegExp(r'[^A-Za-z0-9]'), '')}.csv';
+    await PdfHelper.displayOrDownloadPdf(bytes, filename);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Vehicle history report downloaded ($filename)'),
+          backgroundColor: const Color(0xFF0F5D55),
+        ),
+      );
+    }
   }
 
   Widget _buildDocumentStatusCard(String title, String status, String date, {bool isMobile = false}) {
@@ -912,24 +929,33 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                         builder: (context, constraints) {
                           final isMobile = MediaQuery.of(context).size.width < 600;
                           
+                          void performVehicleSearch(String rawVal) {
+                            final val = rawVal.trim();
+                            if (val.isEmpty) return;
+                            if (!isValidVehicleNumber(val)) {
+                              ScaffoldMessenger.of(context).clearSnackBars();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please enter a valid vehicle number (e.g., TG04AB1234)'),
+                                  backgroundColor: Color(0xFFE11D48),
+                                  duration: Duration(seconds: 3),
+                                ),
+                              );
+                              return;
+                            }
+                            setState(() => _currentPage = 1);
+                            notifier.searchVehicle(val);
+                          }
+
                           final textField = SizedBox(
                             height: 48,
                             child: TextField(
                               controller: _searchController,
                               textCapitalization: TextCapitalization.characters,
-                              inputFormatters: [UpperCaseTextFormatter()],
-                              onChanged: (val) {
-                                final upper = val.toUpperCase();
-                                if (val != upper) {
-                                  _searchController.value = TextEditingValue(
-                                    text: upper,
-                                    selection: TextSelection.collapsed(offset: upper.length),
-                                  );
-                                }
-                              },
+                              inputFormatters: [VehicleNumberTextFormatter()],
                               style: const TextStyle(fontSize: 14, color: Colors.black87),
                               decoration: InputDecoration(
-                                hintText: 'Enter vehicle number (e.g., AP 04 AB 1234)',
+                                hintText: 'Enter vehicle number (e.g., TG04AB1234)',
                                 hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                                 prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -948,24 +974,14 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                                   borderSide: const BorderSide(color: Color(0xFF5CCAB8)),
                                 ),
                               ),
-                              onSubmitted: (val) {
-                                if (val.trim().isNotEmpty) {
-                                  setState(() => _currentPage = 1);
-                                  notifier.searchVehicle(val);
-                                }
-                              },
+                              onSubmitted: performVehicleSearch,
                             ),
                           );
 
                           final searchBtn = SizedBox(
                             height: 48,
                             child: FilledButton.icon(
-                              onPressed: () {
-                                if (_searchController.text.trim().isNotEmpty) {
-                                  setState(() => _currentPage = 1);
-                                  notifier.searchVehicle(_searchController.text);
-                                }
-                              },
+                              onPressed: () => performVehicleSearch(_searchController.text),
                               icon: const Icon(Icons.search, size: 18, color: Colors.white),
                               label: const Text(
                                 'Search',
@@ -1344,11 +1360,7 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Report download started...')),
-                        );
-                      },
+                      onPressed: () => _downloadVehicleReport(context, state),
                       icon: const Icon(Icons.download, color: Colors.white, size: 18),
                       label: const Text('Download Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(

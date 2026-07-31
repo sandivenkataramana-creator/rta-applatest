@@ -1,6 +1,7 @@
 // Replaced long mock responses with production-ready ApiClient using Dio
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -139,6 +140,18 @@ class ApiClient {
 
     final code = e.response?.statusCode ?? 0;
     String message = 'Network error occurred';
+    dynamic errorData = e.response?.data;
+    if (errorData is List<int>) {
+      try {
+        final decoded = utf8.decode(errorData);
+        final parsed = jsonDecode(decoded);
+        if (parsed is Map && parsed['message'] != null) {
+          message = parsed['message'].toString();
+          return ApiException(code: code, message: message);
+        }
+      } catch (_) {}
+    }
+
     if (e.response?.data is Map && e.response?.data['message'] != null) {
       message = e.response!.data['message'].toString();
     } else if (code == 401 || code == 403) {

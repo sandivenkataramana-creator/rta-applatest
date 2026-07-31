@@ -72,244 +72,73 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   final SettingsRepository repository;
 
   Future<void> loadData() async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, error: null);
     try {
-      final usersList = await repository.fetchUsers();
-      final rolesList = await repository.fetchRoles();
-      
-      var permissionsList = await repository.fetchPermissions();
-      if (permissionsList.isEmpty) {
-        permissionsList = [
-          {
-            'id': 1,
-            'permissionName': 'dashboard',
-            'isActive': true,
-            'createdAt': '2026-07-07T07:39:51.928+00:00',
-            'updatedAt': '2026-07-07T10:42:09.906+00:00',
-          }
-        ];
-      }
+      // ── Users, Roles, Permissions (run in parallel) ──────────────────────
+      final results = await Future.wait([
+        repository.fetchUsers().catchError((_) => <dynamic>[]),
+        repository.fetchRoles().catchError((_) => <dynamic>[]),
+        repository.fetchPermissions().catchError((_) => <dynamic>[]),
+        repository.fetchDistricts().catchError((_) => <dynamic>[]),
+      ]);
 
-      var districtsList = await repository.fetchDistricts();
-      if (districtsList.isEmpty) {
-        districtsList = [
-          {"districtName": "Nizamabad", "districtCode": "TS001", "id": 1, "status": true},
-          {"districtName": "Adilabad", "districtCode": "TS002", "id": 2, "status": true},
-          {"districtName": "Sangareddy", "districtCode": "TS003", "id": 3, "status": true},
-          {"districtName": "Kamareddy", "districtCode": "TS004", "id": 4, "status": true},
-          {"districtName": "Nirmal", "districtCode": "TS005", "id": 5, "status": true},
-          {"districtName": "Komaram Bheem Asifabad", "districtCode": "TS006", "id": 6, "status": true},
-          {"districtName": "Jogulamba Gadwal", "districtCode": "TS007", "id": 7, "status": true},
-          {"districtName": "Narayanpet", "districtCode": "TS008", "id": 8, "status": true},
-          {"districtName": "Nalgonda", "districtCode": "TS009", "id": 9, "status": true},
-          {"districtName": "Suryapet", "districtCode": "TS010", "id": 10, "status": true},
-          {"districtName": "Khammam", "districtCode": "TS011", "id": 11, "status": true},
-          {"districtName": "Bhadradri Kothagudem", "districtCode": "TS012", "id": 12, "status": true},
-          {"districtName": "Jayashankar Bhupalpally", "districtCode": "TS013", "id": 13, "status": true},
-          {"districtName": "Mulugu", "districtCode": "TS014", "id": 14, "status": true},
-          {"districtName": "Peddapalli", "districtCode": "TS015", "id": 15, "status": true},
-          {"districtName": "Karimnagar", "districtCode": "TS016", "id": 16, "status": true},
-          {"districtName": "Mancherial", "districtCode": "TS017", "id": 17, "status": true},
-          {"districtName": "Vikarabad", "districtCode": "TS018", "id": 18, "status": true},
-          {"districtName": "Rangareddy", "districtCode": "TS019", "id": 19, "status": true},
-          {"districtName": "Medchal Malkajgiri", "districtCode": "TS020", "id": 20, "status": true}
-        ];
-      }
+      final usersList       = results[0];
+      final rolesList       = results[1];
+      final permissionsList = results[2];
+      final districtsList   = results[3];
 
-      final defaultDistrict = 'Nizamabad';
-      var officesList = await repository.fetchOffices(defaultDistrict);
-      if (officesList.isEmpty) {
-        officesList = [
-          {"officeName": "Satara", "officeCode": "LOC001", "districtCode": "TS001", "status": true, "id": 1}
-        ];
-      }
+      // ── Do NOT pre-select a district. User picks one explicitly.
+      // Offices and cameras are loaded only when the user clicks "Load Cameras".
 
-      final defaultOffice = 'Satara';
-      var camerasList = await repository.fetchCameras(defaultOffice);
-      if (camerasList.isEmpty) {
-        camerasList = [
-          {"cameraLocation": "Satara IN", "cameraID": "CAM001", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 1},
-          {"cameraLocation": "Satara OUT", "cameraID": "CAM002", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 2}
-        ];
-      }
-
+      // ── Offence configs (non-critical — skip if missing) ──────────────────
       List<dynamic> offenceConfigsList = [];
       try {
         final offResponse = await repository.fetchOffenceConfigs();
         offenceConfigsList = offResponse['data'] as List<dynamic>? ?? [];
       } catch (_) {}
 
-      if (offenceConfigsList.isEmpty) {
-        offenceConfigsList = [
-          {
-            "id": 12,
-            "offence": "asasda",
-            "challanAmount": 0.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 0,
-            "isActive": true,
-            "created_time": "2026-07-10T13:15:53.980614",
-            "updated_time": "2026-07-10T13:15:53.980614"
-          },
-          {
-            "id": 11,
-            "offence": "No Helmet",
-            "challanAmount": 0.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 0,
-            "isActive": true,
-            "created_time": "2026-07-07T16:53:38.80958",
-            "updated_time": "2026-07-07T16:53:38.80958"
-          },
-          {
-            "id": 9,
-            "offence": "Mobile",
-            "challanAmount": 0.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 1,
-            "isActive": false,
-            "created_time": null,
-            "updated_time": "2026-07-07T16:25:22.350016"
-          },
-          {
-            "id": 1,
-            "offence": "PUC_CERTIFICATE",
-            "challanAmount": 300.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:44:56.251175"
-          },
-          {
-            "id": 3,
-            "offence": "REGISTRATION_CERTIFICATE",
-            "challanAmount": 350.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:45:05.552961"
-          },
-          {
-            "id": 4,
-            "offence": "INSURANCE_CERTIFICATE",
-            "challanAmount": 650.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:45:16.799881"
-          },
-          {
-            "id": 5,
-            "offence": "FITNESS_CERTIFICATE",
-            "challanAmount": 450.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:45:29.704242"
-          },
-          {
-            "id": 6,
-            "offence": "PERMITTED_CERTIFICATE",
-            "challanAmount": 500.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:45:39.886202"
-          },
-          {
-            "id": 7,
-            "offence": "NO_HELMET_CERTIFICATE",
-            "challanAmount": 150.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:45:50.028709"
-          },
-          {
-            "id": 8,
-            "offence": "TRIPLE_RIDING_CERTIFICATE",
-            "challanAmount": 300.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:46:01.768613"
-          },
-          {
-            "id": 2,
-            "offence": "ROAD_TAX_CERTIFICATE",
-            "challanAmount": 250.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:46:11.460968"
-          },
-          {
-            "id": 10,
-            "offence": "numberplate voilation",
-            "challanAmount": 400.0,
-            "duplicateDays": 1,
-            "gracePeriodDays": 365,
-            "isActive": true,
-            "created_time": null,
-            "updated_time": "2026-07-02T14:46:26.657729"
-          }
-        ];
-      }
-
       state = state.copyWith(
-        users: usersList,
-        roles: rolesList,
-        permissions: permissionsList,
-        districts: districtsList,
-        selectedDistrict: defaultDistrict,
-        offices: officesList,
-        selectedOffice: defaultOffice,
-        cameras: camerasList,
-        offenceConfigs: offenceConfigsList,
-        isLoading: false,
+        users:           usersList,
+        roles:           rolesList,
+        permissions:     permissionsList,
+        districts:       districtsList,
+        selectedDistrict: '',  // No default — user must choose explicitly
+        offices:         const [],
+        selectedOffice:  '',
+        cameras:         const [],
+        offenceConfigs:  offenceConfigsList,
+        isLoading:       false,
       );
     } catch (e) {
       state = state.copyWith(
-        error: e.toString(),
+        error:     e.toString(),
         isLoading: false,
       );
     }
   }
 
   Future<void> changeDistrict(String districtName) async {
-    state = state.copyWith(selectedDistrict: districtName, isLoading: true);
+    if (districtName.isEmpty) return;
+    state = state.copyWith(selectedDistrict: districtName, isLoading: true, error: null);
     try {
-      var officesList = await repository.fetchOffices(districtName);
-      if (officesList.isEmpty && districtName == 'Nizamabad') {
-        officesList = [
-          {"officeName": "Satara", "officeCode": "LOC001", "districtCode": "TS001", "status": true, "id": 1}
-        ];
-      }
-      final nextOffice = officesList.isNotEmpty ? (officesList.first['officeName']?.toString() ?? '') : '';
-      
-      List<dynamic> camerasList = [];
-      if (nextOffice.isNotEmpty) {
-        camerasList = await repository.fetchCameras(nextOffice);
-        if (camerasList.isEmpty && nextOffice == 'Satara') {
-          camerasList = [
-            {"cameraLocation": "Satara IN", "cameraID": "CAM001", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 1},
-            {"cameraLocation": "Satara OUT", "cameraID": "CAM002", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 2}
-          ];
+      final officesList = await repository.fetchOffices(districtName);
+      final List<dynamic> allCameras = [];
+      for (final office in officesList) {
+        final officeName = office['officeName']?.toString() ?? '';
+        if (officeName.isNotEmpty) {
+          try {
+            final cams = await repository.fetchCameras(officeName);
+            allCameras.addAll(cams);
+          } catch (_) {}
         }
       }
-      
+
+      final nextOffice = officesList.isNotEmpty ? (officesList.first['officeName']?.toString() ?? '') : '';
+
       state = state.copyWith(
         offices: officesList,
         selectedOffice: nextOffice,
-        cameras: camerasList,
+        cameras: allCameras,
         isLoading: false,
       );
     } catch (e) {
@@ -318,15 +147,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> changeOffice(String officeName) async {
-    state = state.copyWith(selectedOffice: officeName, isLoading: true);
+    state = state.copyWith(selectedOffice: officeName, isLoading: true, error: null);
     try {
-      var camerasList = await repository.fetchCameras(officeName);
-      if (camerasList.isEmpty && officeName == 'Satara') {
-        camerasList = [
-          {"cameraLocation": "Satara IN", "cameraID": "CAM001", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 1},
-          {"cameraLocation": "Satara OUT", "cameraID": "CAM002", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 2}
-        ];
-      }
+      final camerasList = await repository.fetchCameras(officeName);
       state = state.copyWith(cameras: camerasList, isLoading: false);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
@@ -334,24 +157,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> loadCameras() async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final officeName = state.selectedOffice;
-      if (officeName.isNotEmpty) {
-        var camerasList = await repository.fetchCameras(officeName);
-        if (camerasList.isEmpty && officeName == 'Satara') {
-          camerasList = [
-            {"cameraLocation": "Satara IN", "cameraID": "CAM001", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 1},
-            {"cameraLocation": "Satara OUT", "cameraID": "CAM002", "districtCode": "TS001", "rtaOfficeCode": "LOC001", "channelName": null, "status": true, "id": 2}
-          ];
-        }
-        state = state.copyWith(cameras: camerasList, isLoading: false);
-      } else {
-        state = state.copyWith(isLoading: false);
-      }
-    } catch (e) {
-      state = state.copyWith(error: e.toString(), isLoading: false);
+    final dist = state.selectedDistrict;
+    if (dist.isEmpty) {
+      state = state.copyWith(isLoading: false);
+      return;
     }
+    await changeDistrict(dist);
   }
 
   Future<void> loadUsers() async {

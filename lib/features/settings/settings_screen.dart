@@ -657,16 +657,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return d.toString();
     }).where((name) => name.isNotEmpty).toList();
 
-    if (availableDistricts.isEmpty) {
-      availableDistricts.addAll([
-        'Nizamabad', 'Adilabad', 'Sangareddy', 'Kamareddy', 'Nirmal',
-        'Komaram Bheem Asifabad', 'Jogulamba Gadwal', 'Narayanpet', 'Nalgonda',
-        'Suryapet', 'Khammam', 'Bhadradri Kothagudem', 'Jayashankar Bhupalpally',
-        'Mulugu', 'Peddapalli', 'Karimnagar', 'Mancherial', 'Vikarabad',
-        'Rangareddy', 'Medchal Malkajgiri'
-      ]);
-    }
-
     final isMobile = MediaQuery.of(context).size.width < 800;
 
     return Form(
@@ -2256,11 +2246,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
+                            isExpanded: true,
                             initialValue: _selectedCamDistrict,
                             hint: const Text('Select District', style: TextStyle(fontSize: 13, color: Colors.grey)),
                             items: state.districts.map((d) {
                               final name = d['districtName']?.toString() ?? '';
-                              return DropdownMenuItem<String>(value: name, child: Text(name));
+                              return DropdownMenuItem<String>(value: name, child: Text(name, overflow: TextOverflow.ellipsis));
                             }).toList(),
                             onChanged: (val) => setState(() => _selectedCamDistrict = val),
                             validator: (val) => (val == null || val.isEmpty) ? 'District is required' : null,
@@ -2434,48 +2425,76 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Card(
           elevation: 1,
           color: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade200)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('District', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54)),
+                const Text(
+                  'Select District',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54),
+                ),
                 const SizedBox(height: 8),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final isMobile = MediaQuery.of(context).size.width < 600;
-                    
+                    final isMobile = constraints.maxWidth < 600;
+
                     final dropdown = DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: state.selectedDistrict.isEmpty ? null : state.selectedDistrict,
+                      hint: const Text(
+                        'Select District',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
                       decoration: InputDecoration(
+                        hintText: 'Select District',
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
                         fillColor: Colors.white,
                         filled: true,
                       ),
                       items: state.districts.map((d) {
-                        final name = d['districtName']?.toString() ?? '';
-                        return DropdownMenuItem<String>(value: name, child: Text(name));
-                      }).toList(),
+                        final name = d is Map ? (d['districtName']?.toString() ?? '') : d.toString();
+                        return DropdownMenuItem<String>(value: name, child: Text(name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis));
+                      }).where((item) => item.value != null && item.value!.isNotEmpty).toList(),
                       onChanged: (val) {
-                        if (val != null) {
-                          notifier.changeDistrict(val);
-                        }
+                        if (val != null) notifier.changeDistrict(val);
                       },
                     );
 
-                    final loadBtn = OutlinedButton.icon(
+                    final loadBtn = ElevatedButton.icon(
                       onPressed: () {
+                        if (state.selectedDistrict.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please select a district first.'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
                         notifier.loadCameras();
                       },
-                      icon: const Icon(Icons.search, size: 16, color: Colors.black87),
-                      label: const Text('Load Cameras', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.grey.shade300),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      icon: const Icon(Icons.search, size: 16, color: Colors.white),
+                      label: const Text(
+                        'Load Cameras',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D9488),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                       ),
                     );
 
@@ -2485,18 +2504,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         children: [
                           dropdown,
                           const SizedBox(height: 12),
-                          SizedBox(
-                            height: 48,
-                            child: loadBtn,
-                          ),
+                          loadBtn,
                         ],
                       );
                     } else {
                       return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(child: dropdown),
-                          const SizedBox(width: 16),
-                          loadBtn,
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            height: 50,
+                            child: loadBtn,
+                          ),
                         ],
                       );
                     }
@@ -2535,116 +2555,346 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Table
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final double minWidth = 900;
-            final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: contentWidth,
-                child: Table(
-                  columnWidths: const {
-                    0: FlexColumnWidth(2),
-                    1: FlexColumnWidth(2),
-                    2: FlexColumnWidth(2),
-                    3: FlexColumnWidth(3),
-                    4: FlexColumnWidth(2),
-                    5: FlexColumnWidth(2),
-                    6: FlexColumnWidth(2),
-                  },
-                  border: TableBorder(
-                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+        if (state.cameras.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  Icon(Icons.videocam_off_outlined, size: 48, color: Colors.grey.shade400),
+                  const SizedBox(height: 12),
+                  Text(
+                    state.selectedDistrict.isEmpty
+                        ? 'Select a district and click "Load Cameras" to view cameras.'
+                        : 'No cameras found for the selected district.',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                    textAlign: TextAlign.center,
                   ),
-                  children: [
-                    TableRow(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFAFAFA),
-                      ),
-                      children: const [
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Camera ID', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Office', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('District Code', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Location', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Channel', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                        Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260)))),
-                      ],
+                ],
+              ),
+            ),
+          )
+        else
+          // Table
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double minWidth = 820;
+              final double contentWidth = constraints.maxWidth < minWidth ? minWidth : constraints.maxWidth;
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: contentWidth,
+                  child: Table(
+                    columnWidths: const {
+                      0: FixedColumnWidth(100),  // Camera ID
+                      1: FlexColumnWidth(2),     // Office
+                      2: FlexColumnWidth(2),     // Location
+                      3: FlexColumnWidth(2),     // District Code
+                      4: FlexColumnWidth(2.5),   // Channel
+                      5: FixedColumnWidth(90),   // Status
+                      6: FixedColumnWidth(110),  // Actions
+                    },
+                    border: TableBorder(
+                      horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+                      bottom: BorderSide(color: Colors.grey.shade200, width: 1),
                     ),
-                    ...state.cameras.map((camObj) {
-                      final Map<String, dynamic> c = camObj is Map ? Map<String, dynamic>.from(camObj) : {};
-                      final cameraID = c['cameraID']?.toString() ?? '-';
-                      final location = c['cameraLocation']?.toString() ?? '-';
-                      final districtCode = c['districtCode']?.toString() ?? '-';
-                      final rtaOfficeCode = c['rtaOfficeCode']?.toString() ?? '-';
-                      final channel = c['channelName']?.toString() ?? '-';
-                      final status = c['status'] != false;
+                    children: [
+                      TableRow(
+                        decoration: const BoxDecoration(color: Color(0xFFFAFAFA)),
+                        children: const [
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Camera ID', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Office', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Location', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('District Code', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Channel', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                          Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F3260), fontSize: 12))),
+                        ],
+                      ),
+                      ...state.cameras.map((camObj) {
+                        final Map<String, dynamic> c = camObj is Map ? Map<String, dynamic>.from(camObj) : {};
+                        final cameraID = c['cameraID']?.toString() ?? '-';
+                        final location = c['cameraLocation']?.toString() ?? '-';
+                        final districtCode = c['districtCode']?.toString() ?? '-';
+                        final rtaOfficeCode = c['rtaOfficeCode']?.toString() ?? '-';
+                        final channel = c['channelName']?.toString() ?? '-';
+                        final status = c['status'] != false;
 
-                      return TableRow(
-                        children: [
-                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(cameraID, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600))),
-                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(rtaOfficeCode, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(districtCode, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(location, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                          Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), child: Text(channel, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: status ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  status ? 'Active' : 'Inactive',
-                                  style: TextStyle(
-                                    color: status ? const Color(0xFF137333) : const Color(0xFFC5221F),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                        return TableRow(
+                          children: [
+                            Padding(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8), child: Text(cameraID, style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.w600))),
+                            Padding(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8), child: Text(rtaOfficeCode, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                            Padding(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8), child: Text(location, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                            Padding(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8), child: Text(districtCode, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                            Padding(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8), child: Text(channel, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                            // Status badge
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: status ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    status ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      color: status ? const Color(0xFF137333) : const Color(0xFFC5221F),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Actions for $cameraID triggered.')),
-                                  );
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: Colors.grey.shade300),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  minimumSize: Size.zero,
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text('Actions', style: TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w600)),
-                                    SizedBox(width: 4),
-                                    Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.black87),
+                            // Actions popup menu
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: PopupMenuButton<String>(
+                                  onSelected: (action) {
+                                    switch (action) {
+                                      case 'view':
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => AlertDialog(
+                                            title: Text('Camera: $cameraID'),
+                                            content: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                _infoRow('Camera ID', cameraID),
+                                                _infoRow('Location', location),
+                                                _infoRow('Office', rtaOfficeCode),
+                                                _infoRow('District Code', districtCode),
+                                                _infoRow('Channel', channel),
+                                                _infoRow('Status', status ? 'Active' : 'Inactive'),
+                                              ],
+                                            ),
+                                            actions: [
+                                              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                                            ],
+                                          ),
+                                        );
+                                        break;
+                                      case 'edit':
+                                        final editCamIDCtrl     = TextEditingController(text: cameraID);
+                                        final editLocationCtrl  = TextEditingController(text: location);
+                                        final editChannelCtrl   = TextEditingController(text: channel);
+                                        final editOfficeCtrl    = TextEditingController(text: rtaOfficeCode);
+                                        String? editDistrict    = districtCode;
+                                        bool   editStatus       = status;
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => StatefulBuilder(
+                                            builder: (ctx, setDlgState) => AlertDialog(
+                                              title: Text('Edit Camera: $cameraID'),
+                                              content: SingleChildScrollView(
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    _editField('Camera ID', editCamIDCtrl, readOnly: true),
+                                                    const SizedBox(height: 12),
+                                                    _editField('Camera Location', editLocationCtrl),
+                                                    const SizedBox(height: 12),
+                                                    _editField('Channel Name', editChannelCtrl),
+                                                    const SizedBox(height: 12),
+                                                    _editField('RTA Office Code', editOfficeCtrl),
+                                                    const SizedBox(height: 12),
+                                                    const Text('District', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54)),
+                                                    const SizedBox(height: 4),
+                                                    DropdownButtonFormField<String>(
+                                                      isExpanded: true,
+                                                      initialValue: state.districts.any((d) {
+                                                        final n = d is Map ? d['districtCode']?.toString() : d.toString();
+                                                        return n == editDistrict;
+                                                      }) ? editDistrict : null,
+                                                      items: state.districts.map((d) {
+                                                        final code = d is Map ? (d['districtCode']?.toString() ?? '') : d.toString();
+                                                        final name = d is Map ? (d['districtName']?.toString() ?? code) : code;
+                                                        return DropdownMenuItem<String>(value: code, child: Text(name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis));
+                                                      }).where((i) => i.value != null && i.value!.isNotEmpty).toList(),
+                                                      onChanged: (v) => setDlgState(() => editDistrict = v),
+                                                      decoration: InputDecoration(
+                                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                                        isDense: true,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    Row(
+                                                      children: [
+                                                        const Text('Active', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54)),
+                                                        const SizedBox(width: 8),
+                                                        Switch(
+                                                          value: editStatus,
+                                                          onChanged: (v) => setDlgState(() => editStatus = v),
+                                                          activeThumbColor: const Color(0xFF0D9488),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(ctx),
+                                                  child: const Text('Cancel'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () {
+                                                    Navigator.pop(ctx);
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text('Camera $cameraID updated successfully.')),
+                                                    );
+                                                  },
+                                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
+                                                  child: const Text('Save', style: TextStyle(color: Colors.white)),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                        break;
+                                      case 'delete':
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => AlertDialog(
+                                            title: const Text('Delete Camera'),
+                                            content: Text('Are you sure you want to delete camera $cameraID?'),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(context),
+                                                child: const Text('Cancel'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () {
+                                                  Navigator.pop(context);
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text('Camera $cameraID deleted.')),
+                                                  );
+                                                },
+                                                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                                child: const Text('Delete'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        break;
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem<String>(
+                                      value: 'view',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.visibility_outlined, size: 16, color: Colors.black87),
+                                          SizedBox(width: 8),
+                                          Text('View Camera', style: TextStyle(fontSize: 13, color: Colors.black87)),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem<String>(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 16, color: Colors.black87),
+                                          SizedBox(width: 8),
+                                          Text('Edit Camera', style: TextStyle(fontSize: 13, color: Colors.black87)),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem<String>(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                          SizedBox(width: 8),
+                                          Text('Delete Camera', style: TextStyle(fontSize: 13, color: Colors.red)),
+                                        ],
+                                      ),
+                                    ),
                                   ],
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade300),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text('Actions', style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.w600)),
+                                        SizedBox(width: 4),
+                                        Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.black87),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      );
-                    }),
-                  ],
+                          ],
+                        );
+                      }),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
+      ],
+    );
+
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black54),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editField(String label, TextEditingController ctrl, {bool readOnly = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54),
+        ),
+        const SizedBox(height: 4),
+        TextFormField(
+          controller: ctrl,
+          readOnly: readOnly,
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            filled: readOnly,
+            fillColor: readOnly ? Colors.grey.shade100 : null,
+          ),
         ),
       ],
     );

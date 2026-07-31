@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/uppercase_formatter.dart';
 import '../../core/storage/secure_storage_service.dart';
+import '../../core/utils/pdf_helper.dart';
 import 'reports_models.dart';
 import 'reports_repository.dart';
 
@@ -32,20 +35,70 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     super.dispose();
   }
 
-  void _showExportSnackbar(String format) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(child: Text('$format export generated successfully.', overflow: TextOverflow.ellipsis)),
-          ],
+  Future<void> _downloadReportFile(
+    BuildContext context,
+    String format, {
+    ReportItem? singleReport,
+    List<ReportItem>? reports,
+  }) async {
+    final StringBuffer content = StringBuffer();
+    final String timestamp = DateFormat('yyyy-MM-dd_HHmmss').format(DateTime.now());
+
+    if (singleReport != null) {
+      final name = singleReport.name;
+      final type = singleReport.type;
+      final count = singleReport.count;
+
+      content.writeln('TELANGANA ANPR PORTAL - REPORT EXPORT');
+      content.writeln('Report Name,"$name"');
+      content.writeln('Category,"$type"');
+      content.writeln('Total Records,"${NumberFormat.decimalPattern().format(count)}"');
+      content.writeln('Generated Date,"${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now())}"');
+      content.writeln();
+      content.writeln('S.No,Report Item,Category,Record Count');
+      content.writeln('1,"$name","$type",$count');
+
+      final sanitizeName = name.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+      final ext = format.toLowerCase() == 'excel' ? 'xlsx' : format.toLowerCase();
+      final filename = '${sanitizeName}_$timestamp.$ext';
+
+      final bytes = Uint8List.fromList(utf8.encode(content.toString()));
+      await PdfHelper.displayOrDownloadPdf(bytes, filename);
+    } else {
+      final items = reports ?? [];
+      content.writeln('TELANGANA ANPR PORTAL - ALL REPORTS SUMMARY');
+      content.writeln('Generated Date,"${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now())}"');
+      content.writeln('Total Categories,"${items.length}"');
+      content.writeln();
+      content.writeln('S.No,Report Name,Category,Total Records');
+
+      for (int i = 0; i < items.length; i++) {
+        final r = items[i];
+        content.writeln('${i + 1},"${r.name}","${r.type}",${r.count}');
+      }
+
+      final ext = format.toLowerCase() == 'excel' ? 'xlsx' : format.toLowerCase();
+      final filename = 'telangana_anpr_reports_summary_$timestamp.$ext';
+
+      final bytes = Uint8List.fromList(utf8.encode(content.toString()));
+      await PdfHelper.displayOrDownloadPdf(bytes, filename);
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text('$format export downloaded successfully.', overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0D9488),
+          duration: const Duration(seconds: 2),
         ),
-        backgroundColor: const Color(0xFF0D9488),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+      );
+    }
   }
 
   IconData _getReportIcon(String type) {
@@ -180,44 +233,47 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
                             ElevatedButton.icon(
-                              onPressed: () => _showExportSnackbar('PDF'),
+                              onPressed: () => _downloadReportFile(context, 'PDF', reports: asyncReports.valueOrNull),
                               icon: const Icon(Icons.picture_as_pdf, size: 14, color: Colors.white),
                               label: const Text('Export PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFDC2626),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                minimumSize: const Size(95, 34),
+                                minimumSize: const Size(90, 34),
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: () => _showExportSnackbar('Excel'),
+                              onPressed: () => _downloadReportFile(context, 'Excel', reports: asyncReports.valueOrNull),
                               icon: const Icon(Icons.table_chart, size: 14, color: Colors.white),
                               label: const Text('Export Excel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF16A34A),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                minimumSize: const Size(100, 34),
+                                minimumSize: const Size(95, 34),
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: () => _showExportSnackbar('CSV'),
+                              onPressed: () => _downloadReportFile(context, 'CSV', reports: asyncReports.valueOrNull),
                               icon: const Icon(Icons.grid_on, size: 14, color: Colors.white),
                               label: const Text('Export CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF0D9488),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                minimumSize: const Size(95, 34),
+                                minimumSize: const Size(90, 34),
                               ),
                             ),
                           ],
@@ -428,7 +484,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                             ),
                             const SizedBox(width: 6),
                             IconButton.filledTonal(
-                              onPressed: () => _showExportSnackbar(report.name),
+                              onPressed: () => _downloadReportFile(context, 'CSV', singleReport: report),
                               icon: const Icon(Icons.download, size: 18),
                               color: const Color(0xFF0D9488),
                               style: IconButton.styleFrom(

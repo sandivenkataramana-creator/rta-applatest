@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/widgets/page_header_banner.dart';
+import '../../core/utils/pdf_helper.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
@@ -60,6 +63,9 @@ class VehicleExportState {
     this.isExporting = false,
     this.exportResult,
     this.error,
+    this.selectedTimeRange = 'Select All Time Range',
+    this.selectedVehicleType = 'Select All Vehicle Type',
+    this.selectedViolationType = 'Select All Violation Type',
   });
 
   final List<ExportDistrict> districts;
@@ -76,6 +82,9 @@ class VehicleExportState {
   final bool isExporting;
   final String? exportResult; // success url or message
   final String? error;
+  final String selectedTimeRange;
+  final String selectedVehicleType;
+  final String selectedViolationType;
 
   VehicleExportState copyWith({
     List<ExportDistrict>? districts,
@@ -92,6 +101,9 @@ class VehicleExportState {
     bool? isExporting,
     Object? exportResult = _sentinel,
     Object? error = _sentinel,
+    String? selectedTimeRange,
+    String? selectedVehicleType,
+    String? selectedViolationType,
   }) {
     return VehicleExportState(
       districts: districts ?? this.districts,
@@ -115,6 +127,9 @@ class VehicleExportState {
       exportResult:
           exportResult == _sentinel ? this.exportResult : exportResult as String?,
       error: error == _sentinel ? this.error : error as String?,
+      selectedTimeRange: selectedTimeRange ?? this.selectedTimeRange,
+      selectedVehicleType: selectedVehicleType ?? this.selectedVehicleType,
+      selectedViolationType: selectedViolationType ?? this.selectedViolationType,
     );
   }
 }
@@ -240,20 +255,85 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
     state = state.copyWith(endDate: date);
   }
 
+  void setTimeRange(String range) {
+    final now = DateTime.now();
+    DateTime? start;
+    DateTime? end;
+    if (range == 'Today') {
+      start = DateTime(now.year, now.month, now.day);
+      end = DateTime(now.year, now.month, now.day);
+    } else if (range == 'Yesterday') {
+      final yesterday = now.subtract(const Duration(days: 1));
+      start = DateTime(yesterday.year, yesterday.month, yesterday.day);
+      end = DateTime(yesterday.year, yesterday.month, yesterday.day);
+    } else if (range == 'Last 7 Days') {
+      start = now.subtract(const Duration(days: 7));
+      end = now;
+    } else if (range == 'Last 30 Days') {
+      start = now.subtract(const Duration(days: 30));
+      end = now;
+    }
+    state = state.copyWith(
+      selectedTimeRange: range,
+      startDate: start,
+      endDate: end,
+    );
+  }
+
+  void setCustomTimeRange(DateTime start, DateTime end) {
+    state = state.copyWith(
+      selectedTimeRange: 'Custom',
+      startDate: start,
+      endDate: end,
+    );
+  }
+
+  void setVehicleType(String type) {
+    state = state.copyWith(selectedVehicleType: type);
+  }
+
+  void setViolationType(String type) {
+    state = state.copyWith(selectedViolationType: type);
+  }
+
   Future<void> applyAndExport(BuildContext context) async {
+    if (state.selectedTimeRange == 'Select All Time Range' || state.startDate == null || state.endDate == null) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text('Time Range Required'),
+              ],
+            ),
+            content: const Text('Please select a valid Time Range before applying filters to export.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     state = state.copyWith(isExporting: true, exportResult: null, error: null);
     try {
       final params = <String, dynamic>{};
       if (state.selectedDistrictId != null) {
         final dist = state.districts.firstWhere((d) => d.id == state.selectedDistrictId, orElse: () => ExportDistrict(id: 0, name: '', code: ''));
-        params['districtId'] = state.selectedDistrictId;
-        if (dist.name.isNotEmpty) params['districtName'] = dist.name;
+        if (dist.name.isNotEmpty) {
+          params['districtName'] = dist.name;
+        }
       }
       if (state.selectedZoneId != null) {
         final zone = state.zones.firstWhere((z) => z.id == state.selectedZoneId, orElse: () => ExportZone(id: 0, name: ''));
-        params['zoneId'] = state.selectedZoneId;
         if (zone.name.isNotEmpty) {
-          params['officeName'] = zone.name;
           params['zoneName'] = zone.name;
         }
       }
@@ -261,32 +341,34 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
         params['cameraId'] = state.selectedCameraId;
       }
       if (state.startDate != null) {
-        final sDate = DateFormat('yyyy-MM-dd').format(state.startDate!);
-        params['startDate'] = '$sDate 00:00:00';
-        params['from'] = '$sDate 00:00:00';
+        params['startDate'] = DateFormat("yyyy-MM-dd'T'HH:mm").format(state.startDate!);
       }
       if (state.endDate != null) {
-        final eDate = DateFormat('yyyy-MM-dd').format(state.endDate!);
-        params['endDate'] = '$eDate 23:59:59';
-        params['to'] = '$eDate 23:59:59';
+        params['endDate'] = DateFormat("yyyy-MM-dd'T'HH:mm").format(state.endDate!);
+      }
+      if (state.selectedVehicleType != 'Select All Vehicle Type') {
+        params['vehicleType'] = state.selectedVehicleType;
+      }
+      if (state.selectedViolationType != 'Select All Violation Type') {
+        params['violationType'] = state.selectedViolationType;
       }
 
-      String? downloadUrl;
-      try {
-        final res = await _api.get<dynamic>(
-          '/anpr/export',
-          queryParameters: params,
-        );
-        downloadUrl = (res.data is Map)
-            ? res.data['url']?.toString()
-            : res.data?.toString();
-      } catch (_) {
-        downloadUrl = null;
+      final res = await _api.post<dynamic>(
+        '/vehicle-export/excel',
+        data: params,
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      if (res.data == null) {
+        throw Exception('Export response was empty.');
       }
+
+      final bytes = res.data as List<int>;
+      final b64String = base64Encode(bytes);
 
       state = state.copyWith(
         isExporting: false,
-        exportResult: downloadUrl ?? 'Export completed successfully.',
+        exportResult: b64String,
       );
 
       if (context.mounted) {
@@ -487,16 +569,66 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: _TimeRangeFilter(
-                                startDate: state.startDate,
-                                endDate: state.endDate,
-                                onStartChanged: notifier.setStartDate,
-                                onEndChanged: notifier.setEndDate,
+                              child: _StringDropdownFilter(
+                                icon: Icons.calendar_month_outlined,
+                                items: _buildTimeRangeOptions(state),
+                                value: state.selectedTimeRange == 'Custom' && state.startDate != null && state.endDate != null
+                                    ? 'Custom (${DateFormat('dd/MM/yyyy').format(state.startDate!)} – ${DateFormat('dd/MM/yyyy').format(state.endDate!)})'
+                                    : state.selectedTimeRange,
+                                onChanged: (val) => _onTimeRangeChanged(val, notifier),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _StringDropdownFilter(
+                                icon: Icons.directions_car_outlined,
+                                items: const [
+                                  'Select All Vehicle Type',
+                                  'Non-transport',
+                                  'Transport',
+                                  'MOTOR CAR',
+                                  'MOTOR CYCLE',
+                                  'AUTO RICKSHAW',
+                                  'GOODS CARRIAGE',
+                                  'TRACTOR',
+                                  'BUS',
+                                  'LGV'
+                                ],
+                                value: state.selectedVehicleType,
+                                onChanged: (val) => notifier.setVehicleType(val ?? 'Select All Vehicle Type'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _StringDropdownFilter(
+                                icon: Icons.warning_amber_outlined,
+                                items: const [
+                                  'Select All Violation Type',
+                                  'PUC_CERTIFICATE',
+                                  'REGISTRATION_CERTIFICATE',
+                                  'INSURANCE_CERTIFICATE',
+                                  'FITNESS_CERTIFICATE',
+                                  'PERMITTED_CERTIFICATE',
+                                  'ROAD_TAX_CERTIFICATE',
+                                  'Puc Missing',
+                                  'Insurance Violation',
+                                  'Road Tax Violation',
+                                  'Permit Violation',
+                                  'Fitness Violation',
+                                  'Registration Violation',
+                                  'All Clear'
+                                ],
+                                value: state.selectedViolationType,
+                                onChanged: (val) => notifier.setViolationType(val ?? 'Select All Violation Type'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
                         _ApplyButton(
                           isLoading: state.isExporting,
                           onPressed: () => notifier.applyAndExport(context),
@@ -542,42 +674,63 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
               const SizedBox(height: 16),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: const Color(0xFFE8F4F3),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFF13A89E)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.check_circle_outline,
-                        color: _teal, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline,
+                            color: _teal, size: 20),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
                             'Export Successful',
                             style: TextStyle(
                               color: _teal,
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              fontSize: 14,
                             ),
                           ),
-                          if (state.exportResult!.startsWith('http'))
-                            Text(
-                              'Download URL: ${state.exportResult}',
-                              style: const TextStyle(
-                                  color: _tealLight, fontSize: 12),
-                            )
-                          else
-                            Text(
-                              state.exportResult!,
-                              style: const TextStyle(
-                                  color: _teal, fontSize: 12),
-                            ),
-                        ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Export completed successfully. You can download the generated Excel file below.',
+                      style: TextStyle(color: Color(0xFF2C7A7B), fontSize: 13),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          final exportData = state.exportResult;
+                          if (exportData != null) {
+                            PdfHelper.displayOrDownloadPdf(exportData, 'vehicle_export.xlsx');
+                          }
+                        },
+                        icon: const Icon(Icons.download, size: 16, color: Colors.white),
+                        label: const Text(
+                          'Download Excel File',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D9488),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
                   ],
@@ -656,6 +809,52 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
     return state.cameras
         .where((c) => c.zoneId == state.selectedZoneId)
         .toList();
+  }
+
+  List<String> _buildTimeRangeOptions(VehicleExportState state) {
+    final base = ['Select All Time Range', 'Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days'];
+    if (state.selectedTimeRange == 'Custom' && state.startDate != null && state.endDate != null) {
+      final fmt = DateFormat('dd/MM/yyyy');
+      return [...base, 'Custom (${fmt.format(state.startDate!)} – ${fmt.format(state.endDate!)})'];
+    }
+    return [...base, 'Custom'];
+  }
+
+  void _onTimeRangeChanged(String? val, VehicleExportNotifier notifier) {
+    if (val == null) return;
+    if (val.startsWith('Custom')) {
+      _pickCustomDateRange(context, notifier);
+    } else {
+      notifier.setTimeRange(val);
+    }
+  }
+
+  Future<void> _pickCustomDateRange(BuildContext context, VehicleExportNotifier notifier) async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      initialDateRange: null,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0F5D55),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      notifier.setCustomTimeRange(picked.start, picked.end);
+    } else {
+      notifier.setTimeRange('Select All Time Range');
+    }
   }
 }
 
@@ -770,96 +969,60 @@ class _DropdownFilter extends StatelessWidget {
   }
 }
 
-class _TimeRangeFilter extends StatelessWidget {
-  const _TimeRangeFilter({
-    required this.startDate,
-    required this.endDate,
-    required this.onStartChanged,
-    required this.onEndChanged,
+class _StringDropdownFilter extends StatelessWidget {
+  const _StringDropdownFilter({
+    required this.icon,
+    required this.items,
+    required this.value,
+    required this.onChanged,
   });
 
-  final DateTime? startDate;
-  final DateTime? endDate;
-  final void Function(DateTime?) onStartChanged;
-  final void Function(DateTime?) onEndChanged;
+  final IconData icon;
+  final List<String> items;
+  final String value;
+  final void Function(String?) onChanged;
 
   static const _tealLight = Color(0xFF13A89E);
   static const _border = Color(0xFFE2ECEC);
 
-  String get _label {
-    final fmt = DateFormat('dd/MM/yyyy');
-    if (startDate == null && endDate == null) return 'Select All Time Range';
-    if (startDate != null && endDate != null) {
-      return '${fmt.format(startDate!)} – ${fmt.format(endDate!)}';
-    }
-    if (startDate != null) return 'From ${fmt.format(startDate!)}';
-    return 'To ${fmt.format(endDate!)}';
-  }
-
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => _pickRange(context),
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _border),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.calendar_month_outlined,
-                size: 15, color: _tealLight),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                _label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: startDate != null || endDate != null
-                      ? const Color(0xFF1A202C)
-                      : const Color(0xFF4A5568),
-                ),
-                overflow: TextOverflow.ellipsis,
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: Color(0xFF718096)),
+          items: items.map(
+            (item) => DropdownMenuItem<String>(
+              value: item,
+              child: Row(
+                children: [
+                  Icon(icon, size: 15, color: _tealLight),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF4A5568)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const Icon(Icons.keyboard_arrow_down,
-                size: 18, color: Color(0xFF718096)),
-          ],
+          ).toList(),
+          onChanged: onChanged,
         ),
       ),
     );
-  }
-
-  Future<void> _pickRange(BuildContext context) async {
-    final now = DateTime.now();
-
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: now,
-      initialDateRange: null,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF0F5D55),
-              onPrimary: Colors.white,
-              surface: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      onStartChanged(picked.start);
-      onEndChanged(picked.end);
-    }
   }
 }
 

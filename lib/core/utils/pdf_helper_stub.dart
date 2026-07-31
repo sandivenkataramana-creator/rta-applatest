@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:dio/dio.dart';
+
 const MethodChannel _pdfChannel = MethodChannel('com.telangana.rta.rta_app/pdf_viewer');
 
 Future<bool> openPdfBytes(Uint8List bytes, String filename, {bool openViewer = false}) async {
@@ -49,4 +51,27 @@ Future<bool> openPdfBytes(Uint8List bytes, String filename, {bool openViewer = f
 
 Future<void> openPdfUrl(String url) async {
   debugPrint('Open PDF URL: $url');
+  try {
+    String filename = 'download.xlsx';
+    final uri = Uri.parse(url);
+    final segments = uri.pathSegments;
+    if (segments.isNotEmpty) {
+      final last = segments.last;
+      if (last.contains('.')) {
+        filename = last;
+      }
+    }
+
+    final dio = Dio();
+    final response = await dio.get<List<int>>(
+      url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    if (response.data != null) {
+      final bytes = Uint8List.fromList(response.data!);
+      await openPdfBytes(bytes, filename);
+    }
+  } catch (e) {
+    debugPrint('Error in openPdfUrl on mobile: $e');
+  }
 }
