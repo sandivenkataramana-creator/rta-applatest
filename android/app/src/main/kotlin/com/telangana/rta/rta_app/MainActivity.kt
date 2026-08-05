@@ -1,12 +1,17 @@
 package com.telangana.rta.rta_app
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -34,6 +39,8 @@ class MainActivity : FlutterActivity() {
 
                     if (bytes != null && fileName != null) {
                         try {
+                            var savedUri: Uri? = null
+
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                 val isImage = mimeType.startsWith("image/")
                                 val collection = if (isImage) {
@@ -68,6 +75,8 @@ class MainActivity : FlutterActivity() {
                                     resolver.update(uri, contentValues, null, null)
 
                                     MediaScannerConnection.scanFile(context, arrayOf(uri.toString()), arrayOf(mimeType), null)
+                                    savedUri = uri
+                                    showDownloadNotification(fileName, uri, mimeType)
                                     result.success(true)
                                     return@setMethodCallHandler
                                 }
@@ -89,7 +98,9 @@ class MainActivity : FlutterActivity() {
                                 outputStream.flush()
                             }
 
+                            savedUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", finalFile)
                             MediaScannerConnection.scanFile(context, arrayOf(finalFile.absolutePath), arrayOf(mimeType), null)
+                            showDownloadNotification(fileName, savedUri, mimeType)
                             result.success(true)
                         } catch (e: Exception) {
                             result.error("SAVE_ERROR", e.message, null)
@@ -130,6 +141,51 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    private fun showDownloadNotification(fileName: String, uri: Uri?, mimeType: String) {
+        try {
+            val channelId = "rta_download_channel"
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "File Downloads",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Notifications for downloaded files and PDFs"
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                if (uri != null) {
+                    setDataAndType(uri, mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            )
+
+            val builder = NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Download Complete")
+                .setContentText("$fileName saved to Downloads")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+
+            notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

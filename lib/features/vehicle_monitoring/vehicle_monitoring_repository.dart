@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/network/api_client.dart';
+import '../../core/storage/secure_storage_service.dart';
 import 'vehicle_monitoring_models.dart';
 
 class VehicleMonitoringRepository {
@@ -9,10 +10,17 @@ class VehicleMonitoringRepository {
   final ApiClient _apiClient;
 
   Future<List<VehicleDetection>> fetchDetections() async {
-    final response = await _apiClient.get<List<dynamic>>('/vehicles');
-    return response.data!
-        .map((item) => VehicleDetection.fromJson(item as Map<String, dynamic>))
-        .toList();
+    try {
+      final violations = await fetchViolations();
+      if (violations.isNotEmpty) {
+        return violations
+            .map((item) => VehicleDetection.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching detections: $e');
+    }
+    return [];
   }
 
   Future<List<dynamic>> fetchViolations({
@@ -146,15 +154,28 @@ class VehicleMonitoringRepository {
   Future<List<String>> fetchDistricts() async {
     final response = await _apiClient.get<List<dynamic>>('/districts');
     final districtList = response.data ?? [];
+
+    final storage = SecureStorageService();
+    final assignedIds = await storage.readDistrictIds();
+
     final names = districtList
         .map((item) {
           if (item is Map) {
+            final id = int.tryParse(item['id']?.toString() ?? '');
+            if (assignedIds.isNotEmpty && (id == null || !assignedIds.contains(id))) {
+              return null;
+            }
             return item['districtName']?.toString();
           }
           return null;
         })
         .whereType<String>()
         .toList();
+
+    if (assignedIds.isNotEmpty && names.isNotEmpty) {
+      return names;
+    }
+
     return ['Select All District', ...names];
   }
 
@@ -284,5 +305,57 @@ class VehicleMonitoringRepository {
       debugPrint('Warning: saveDriverSign API error: $e');
     }
     return {};
+  }
+
+  Future<List<Map<String, dynamic>>> fetchVcrHistory(String registrationNumber) async {
+    final cleanReg = registrationNumber.replaceAll(RegExp(r'\s+'), '').trim();
+    if (cleanReg.isEmpty) return [];
+
+    List<Map<String, dynamic>> parseList(dynamic raw) {
+      if (raw is List) {
+        return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      } else if (raw is Map) {
+        for (final key in ['data', 'content', 'result', 'vcrList', 'vcrs', 'vcrHistory', 'items', 'list', 'history']) {
+          if (raw[key] is List) {
+            return (raw[key] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+          }
+        }
+      }
+      return [];
+    }
+
+    final endpoints = [
+      '/vcr/history/$cleanReg',
+      '/vcr/getVcrByVehicle/$cleanReg',
+      '/vcr/getVcrListByVehicleNo/$cleanReg',
+      '/vcr/byVehicle/$cleanReg',
+      '/vcr/getVcrDetails/$cleanReg',
+    ];
+
+    for (final ep in endpoints) {
+      try {
+        final response = await _apiClient.get<dynamic>(ep);
+        final list = parseList(response.data);
+        if (list.isNotEmpty) {
+          return list;
+        }
+      } catch (e) {
+        debugPrint('Error fetching VCR history from $ep: $e');
+      }
+    }
+    return [];
+  }
+
+  Future<dynamic> generatePdf(String vcrNumber) async {
+    try {
+      final response = await _apiClient.post<dynamic>(
+        '/generatepdf',
+        data: {'vcrNumber': vcrNumber},
+      );
+      return response.data;
+    } catch (e) {
+      debugPrint('Error generating PDF for $vcrNumber: $e');
+      rethrow;
+    }
   }
 }

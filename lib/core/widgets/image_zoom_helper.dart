@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'network_image_helper.dart';
 
 void showZoomedImageDialog(BuildContext context, String imageUrl) {
-  final String effectiveUrl = imageUrl.trim().isEmpty
-      ? 'assets/images/background_traffic.png'
-      : imageUrl.trim();
+  final String effectiveUrl = imageUrl.trim();
 
   Navigator.of(context).push(
     PageRouteBuilder(
@@ -146,15 +144,33 @@ class _ZoomableImageViewerState extends State<_ZoomableImageViewer> {
   }
 
   Widget _buildImageWidget(String url) {
-    if (url.startsWith('assets/')) {
-      return Image.asset(url, fit: BoxFit.contain);
+    final clean = url.trim();
+    if (clean.isEmpty || clean == 'assets/images/background_traffic.png') {
+      return Container(
+        width: 320,
+        height: 220,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade900,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.hide_image_outlined, size: 48, color: Colors.white54),
+              SizedBox(height: 12),
+              Text(
+                '(image not found)',
+                style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
     }
-    return Image.network(
-      url,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) {
-        return buildPlatformNetImage(url, fit: BoxFit.contain);
-      },
-    );
+    if (clean.startsWith('assets/')) {
+      return Image.asset(clean, fit: BoxFit.contain);
+    }
+    return buildPlatformNetImage(clean, fit: BoxFit.contain);
   }
 }

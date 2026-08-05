@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -95,6 +98,65 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _selectedDistricts.clear();
     _selectAllDistricts = false;
     _signaturePoints.clear();
+  }
+
+  Future<void> _onRoleSelected(String roleName, bool isSelected) async {
+    setState(() {
+      if (isSelected) {
+        _selectedRoles.add(roleName);
+      } else {
+        _selectedRoles.remove(roleName);
+      }
+    });
+
+    if (!isSelected) return;
+
+    // Find roleId
+    dynamic roleId;
+    final state = ref.read(settingsNotifierProvider);
+    for (final r in state.roles) {
+      if (r is Map) {
+        final name = r['roleName']?.toString() ?? '';
+        if (name.toLowerCase() == roleName.toLowerCase()) {
+          roleId = r['id'];
+          break;
+        }
+      }
+    }
+
+    if (roleId == null) {
+      final nameLower = roleName.toLowerCase();
+      if (nameLower.contains('admin')) {
+        roleId = 1;
+      } else if (nameLower.contains('view')) {
+        roleId = 2;
+      } else if (nameLower.contains('test')) {
+        roleId = 3;
+      } else if (nameLower.contains('sub inspector')) {
+        roleId = 5;
+      } else if (nameLower.contains('inspector')) {
+        roleId = 4;
+      } else if (nameLower.contains('officer')) {
+        roleId = 6;
+      } else {
+        roleId = 1;
+      }
+    }
+
+    final perms = await ref.read(settingsNotifierProvider.notifier).fetchRolePermissions(roleId);
+    if (!mounted) return;
+
+    setState(() {
+      for (final item in perms) {
+        if (item is Map) {
+          final permName = item['permissionName']?.toString();
+          final isActive = item['isActive'] ?? true;
+          if (permName != null && permName.isNotEmpty && isActive) {
+            _selectedPermissions.add(permName);
+          }
+        }
+      }
+    });
   }
 
   String _formatCreatedDate(String? dateStr) {
@@ -586,11 +648,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     OutlinedButton(
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Edit user functionality under construction.')),
-                                        );
-                                      },
+                                      onPressed: () => _showEditUserDialog(user),
                                       style: OutlinedButton.styleFrom(
                                         side: BorderSide(color: Colors.grey.shade300),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -636,21 +694,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }).where((name) => name.isNotEmpty).toList();
 
     if (availableRoles.isEmpty) {
-      availableRoles.addAll(['Admin', 'Viewer', 'Tester', 'Inspector', 'Sub Inspector', 'officer']);
+      availableRoles.addAll(['Admin', 'Viewer', 'Tester', 'Inspector', 'Sub Inspector', 'Officer', 'Super Admin']);
     }
 
-    final availablePermissions = [
-      'LIVE_FEED',
-      'SETTINGS',
-      'CHALLAN',
-      'HISTORY',
-      'SUPPORT_CENTER',
-      'DETAILES_NOT_FOUND',
-      'VEHICLE_HISTORY',
-      'DASHBOARD',
-      'BUDGET_PAGE',
-      'VEHICLE_EXPORT',
-    ];
+    final dynamicPermissions = state.permissions.map((p) {
+      if (p is Map) return p['permissionName']?.toString() ?? '';
+      return p.toString();
+    }).where((name) => name.isNotEmpty).toList();
+
+    final Set<String> allPermSet = {
+      ...dynamicPermissions,
+      ..._selectedPermissions,
+    };
+    final availablePermissions = allPermSet.toList();
 
     final availableDistricts = state.districts.map((d) {
       if (d is Map) return d['districtName']?.toString() ?? '';
@@ -685,10 +741,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 16),
             _buildFormTextField(
               label: 'Mobile Number',
-              hintText: 'Enter mobile (10-15 digits)',
+              hintText: 'Enter 10-digit mobile number',
               controller: _mobileController,
               isRequired: true,
-              keyboardType: TextInputType.phone,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
+              customValidator: (val) {
+                if (val == null || val.trim().isEmpty) return 'Mobile number is required';
+                if (!RegExp(r'^\d{10}$').hasMatch(val.trim())) return 'Mobile number must be exactly 10 digits';
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             _buildFormTextField(
@@ -701,15 +766,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 16),
             _buildFormTextField(
               label: 'Email',
-              hintText: 'Enter email (optional)',
+              hintText: 'Enter email address',
               controller: _emailController,
+              isRequired: true,
               keyboardType: TextInputType.emailAddress,
+              customValidator: (val) {
+                if (val == null || val.trim().isEmpty) return 'Email is required';
+                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) return 'Enter a valid email address';
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             _buildFormTextField(
               label: 'First Name',
-              hintText: 'Enter first name (optional)',
+              hintText: 'Enter first name',
               controller: _firstNameController,
+              isRequired: true,
             ),
             const SizedBox(height: 16),
             _buildFormTextField(
@@ -733,10 +805,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: _buildFormTextField(
                     label: 'Mobile Number',
-                    hintText: 'Enter mobile (10-15 digits)',
+                    hintText: 'Enter 10-digit mobile number',
                     controller: _mobileController,
                     isRequired: true,
-                    keyboardType: TextInputType.phone,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    customValidator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'Mobile number is required';
+                      if (!RegExp(r'^\d{10}$').hasMatch(val.trim())) return 'Mobile number must be exactly 10 digits';
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -758,9 +839,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: _buildFormTextField(
                     label: 'Email',
-                    hintText: 'Enter email (optional)',
+                    hintText: 'Enter email address',
                     controller: _emailController,
+                    isRequired: true,
                     keyboardType: TextInputType.emailAddress,
+                    customValidator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'Email is required';
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) return 'Enter a valid email address';
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -772,8 +859,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: _buildFormTextField(
                     label: 'First Name',
-                    hintText: 'Enter first name (optional)',
+                    hintText: 'Enter first name',
                     controller: _firstNameController,
+                    isRequired: true,
                   ),
                 ),
                 const SizedBox(width: 20),
@@ -812,13 +900,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     value: isChecked,
                     activeColor: const Color(0xFF0D9488),
                     onChanged: (val) {
-                      setState(() {
-                        if (val == true) {
-                          _selectedRoles.add(roleName);
-                        } else {
-                          _selectedRoles.remove(roleName);
-                        }
-                      });
+                      _onRoleSelected(roleName, val == true);
                     },
                   );
                 }).toList(),
@@ -938,13 +1020,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               value: isChecked,
                               activeColor: const Color(0xFF0D9488),
                               onChanged: (val) {
-                                setState(() {
-                                  if (val == true) {
-                                    _selectedRoles.add(roleName);
-                                  } else {
-                                    _selectedRoles.remove(roleName);
-                                  }
-                                });
+                                _onRoleSelected(roleName, val == true);
                               },
                             );
                           }).toList(),
@@ -1060,50 +1136,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: Listener(
-              onPointerDown: (event) {
-                final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                final localPosition = renderBox.globalToLocal(event.position);
-                setState(() {
-                  _signaturePoints.add(localPosition);
-                });
-              },
-              onPointerMove: (event) {
-                final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                final localPosition = renderBox.globalToLocal(event.position);
-                setState(() {
-                  _signaturePoints.add(localPosition);
-                });
-              },
-              onPointerUp: (event) {
-                setState(() {
-                  _signaturePoints.add(null);
-                });
-              },
-              child: CustomPaint(
-                painter: _SignaturePainter(_signaturePoints),
-                child: Stack(
-                  children: [
-                    if (_signaturePoints.isEmpty)
-                      const Center(
-                        child: Text(
-                          'Draw signature here',
-                          style: TextStyle(color: Colors.black26, fontSize: 13),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Listener(
+                onPointerDown: (event) {
+                  setState(() {
+                    _signaturePoints.add(event.localPosition);
+                  });
+                },
+                onPointerMove: (event) {
+                  setState(() {
+                    _signaturePoints.add(event.localPosition);
+                  });
+                },
+                onPointerUp: (event) {
+                  setState(() {
+                    _signaturePoints.add(null);
+                  });
+                },
+                child: CustomPaint(
+                  painter: _SignaturePainter(_signaturePoints),
+                  child: Stack(
+                    children: [
+                      if (_signaturePoints.isEmpty)
+                        const Center(
+                          child: Text(
+                            'Draw signature here',
+                            style: TextStyle(color: Colors.black26, fontSize: 13),
+                          ),
+                        ),
+                      Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: OutlinedButton(
+                          onPressed: () => setState(() => _signaturePoints.clear()),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            side: BorderSide(color: Colors.grey.shade400),
+                          ),
+                          child: const Text('Clear Signature', style: TextStyle(color: Color(0xFF334155), fontSize: 12)),
                         ),
                       ),
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: OutlinedButton(
-                        onPressed: () => setState(() => _signaturePoints.clear()),
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          side: BorderSide(color: Colors.grey.shade400),
-                        ),
-                        child: const Text('Clear Signature', style: TextStyle(color: Color(0xFF334155), fontSize: 12)),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1152,6 +1228,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     bool isRequired = false,
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String?)? customValidator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1183,10 +1261,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           controller: controller,
           obscureText: isPassword && _obscurePassword,
           keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
           style: const TextStyle(fontSize: 13),
-          validator: isRequired
+          validator: customValidator ?? (isRequired
               ? (val) => (val == null || val.trim().isEmpty) ? '$label is required' : null
-              : null,
+              : null),
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
@@ -1217,31 +1296,159 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Future<String?> _getSignatureBase64() async {
+    if (_signaturePoints.isEmpty) return null;
+
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 400, 160));
+
+      final bgPaint = Paint()..color = const Color(0xFFFFFFFF);
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 400, 160), bgPaint);
+
+      final paint = Paint()
+        ..color = const Color(0xFF000000)
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 3.0;
+
+      for (int i = 0; i < _signaturePoints.length - 1; i++) {
+        if (_signaturePoints[i] != null && _signaturePoints[i + 1] != null) {
+          canvas.drawLine(_signaturePoints[i]!, _signaturePoints[i + 1]!, paint);
+        } else if (_signaturePoints[i] != null && _signaturePoints[i + 1] == null) {
+          canvas.drawPoints(ui.PointMode.points, [_signaturePoints[i]!], paint);
+        }
+      }
+
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(400, 160);
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return null;
+
+      final bytes = byteData.buffer.asUint8List();
+      return base64Encode(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _submitInlineCreateUser() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final messenger = ScaffoldMessenger.of(context);
+    final state = ref.read(settingsNotifierProvider);
     final roleStr = _selectedRoles.isNotEmpty ? _selectedRoles.join(', ') : 'User';
+
+    // 1. Map Role IDs
+    final List<int> roleIds = [];
+    for (final roleName in _selectedRoles) {
+      int? foundId;
+      for (final r in state.roles) {
+        if (r is Map) {
+          final name = r['roleName']?.toString() ?? '';
+          if (name.toLowerCase() == roleName.toLowerCase()) {
+            if (r['id'] is int) {
+              foundId = r['id'];
+            } else if (r['id'] != null) {
+              foundId = int.tryParse(r['id'].toString());
+            }
+            break;
+          }
+        }
+      }
+      if (foundId != null) {
+        roleIds.add(foundId);
+      } else {
+        final nameLower = roleName.toLowerCase();
+        if (nameLower.contains('super admin') || nameLower.contains('superadmin')) {
+          roleIds.add(7);
+        } else if (nameLower.contains('admin')) {
+          roleIds.add(1);
+        } else if (nameLower.contains('view')) {
+          roleIds.add(2);
+        } else if (nameLower.contains('test')) {
+          roleIds.add(3);
+        } else if (nameLower.contains('sub inspector')) {
+          roleIds.add(5);
+        } else if (nameLower.contains('inspector')) {
+          roleIds.add(4);
+        } else if (nameLower.contains('officer')) {
+          roleIds.add(6);
+        }
+      }
+    }
+
+    // 2. Map Permission IDs
+    final List<int> allowPermissionIds = [];
+    for (final permName in _selectedPermissions) {
+      int? foundId;
+      for (final p in state.permissions) {
+        if (p is Map) {
+          final name = p['permissionName']?.toString() ?? '';
+          if (name.toUpperCase() == permName.toUpperCase()) {
+            if (p['id'] is int) {
+              foundId = p['id'];
+            } else if (p['id'] != null) {
+              foundId = int.tryParse(p['id'].toString());
+            }
+            break;
+          }
+        }
+      }
+      if (foundId != null) {
+        allowPermissionIds.add(foundId);
+      }
+    }
+
+    // 3. Map District IDs
+    final List<int> districtIds = [];
+    for (final distName in _selectedDistricts) {
+      int? foundId;
+      for (int i = 0; i < state.districts.length; i++) {
+        final d = state.districts[i];
+        if (d is Map) {
+          final name = d['districtName']?.toString() ?? d['officeName']?.toString() ?? '';
+          if (name.toLowerCase() == distName.toLowerCase()) {
+            if (d['id'] is int) {
+              foundId = d['id'];
+            } else if (d['id'] != null) {
+              foundId = int.tryParse(d['id'].toString());
+            } else {
+              foundId = i + 1;
+            }
+            break;
+          }
+        } else if (d.toString().toLowerCase() == distName.toLowerCase()) {
+          foundId = i + 1;
+          break;
+        }
+      }
+      if (foundId != null) {
+        districtIds.add(foundId);
+      }
+    }
+
+    // 4. Generate Signature Base64
+    final signatureBase64 = await _getSignatureBase64();
 
     final success = await ref.read(settingsNotifierProvider.notifier).createNewUser(
           username: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
           firstName: _firstNameController.text.trim(),
           lastName: _lastNameController.text.trim(),
           email: _emailController.text.trim(),
           mobileNumber: _mobileController.text.trim(),
           role: roleStr,
+          roleIds: roleIds,
+          allowPermissionIds: allowPermissionIds,
+          denyPermissionIds: [],
+          districtIds: districtIds,
+          signatureBase64: signatureBase64,
         );
 
     if (success && mounted) {
       setState(() {
+        _resetCreateUserForm();
         _showCreateUserForm = false;
-        _usernameController.clear();
-        _passwordController.clear();
-        _firstNameController.clear();
-        _lastNameController.clear();
-        _emailController.clear();
-        _mobileController.clear();
-        _signaturePoints.clear();
       });
       messenger.showSnackBar(
         const SnackBar(content: Text('User created successfully.')),
@@ -2851,6 +3058,186 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   }
 
+  void _showEditUserDialog(Map<String, dynamic> user) {
+    final editFormKey = GlobalKey<FormState>();
+    final usernameCtrl = TextEditingController(text: user['username']?.toString() ?? '');
+    final firstNameCtrl = TextEditingController(text: user['firstName']?.toString() ?? '');
+    final lastNameCtrl = TextEditingController(text: user['lastName']?.toString() ?? '');
+    final emailCtrl = TextEditingController(text: user['email']?.toString() ?? '');
+    final mobileCtrl = TextEditingController(text: user['mobileNumber']?.toString() ?? user['phone']?.toString() ?? '');
+    String selectedRole = user['role']?.toString() ?? 'User';
+
+    final state = ref.read(settingsNotifierProvider);
+    final availableRoles = state.roles.map((r) {
+      if (r is Map) return r['roleName']?.toString() ?? '';
+      return r.toString();
+    }).where((name) => name.isNotEmpty).toList();
+
+    if (availableRoles.isEmpty) {
+      availableRoles.addAll(['Admin', 'Viewer', 'Tester', 'Inspector', 'Sub Inspector', 'officer']);
+    }
+
+    if (!availableRoles.contains(selectedRole)) {
+      availableRoles.add(selectedRole);
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: Text(
+              'Edit User: ${user['username'] ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F3260)),
+            ),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 450,
+                child: Form(
+                  key: editFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Username
+                      TextFormField(
+                        controller: usernameCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Username *',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        validator: (val) => (val == null || val.trim().isEmpty) ? 'Username is required' : null,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // First Name
+                      TextFormField(
+                        controller: firstNameCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'First Name *',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        validator: (val) => (val == null || val.trim().isEmpty) ? 'First name is required' : null,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Last Name
+                      TextFormField(
+                        controller: lastNameCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Last Name (optional)',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Email
+                      TextFormField(
+                        controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          labelText: 'Email *',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Email is required';
+                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) {
+                            return 'Enter a valid email address';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Mobile Number
+                      TextFormField(
+                        controller: mobileCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Mobile Number *',
+                          hintText: 'Enter 10-digit mobile number',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Mobile number is required';
+                          if (!RegExp(r'^\d{10}$').hasMatch(val.trim())) return 'Mobile number must be 10 digits';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Role Dropdown
+                      DropdownButtonFormField<String>(
+                        initialValue: availableRoles.contains(selectedRole) ? selectedRole : availableRoles.first,
+                        decoration: InputDecoration(
+                          labelText: 'Role *',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        items: availableRoles.map((roleName) {
+                          return DropdownMenuItem<String>(
+                            value: roleName,
+                            child: Text(roleName),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDlgState(() => selectedRole = val);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (!(editFormKey.currentState?.validate() ?? false)) return;
+                  final navigator = Navigator.of(dialogCtx);
+                  final messenger = ScaffoldMessenger.of(context);
+                  final userId = user['id'] ?? 0;
+                  final success = await ref.read(settingsNotifierProvider.notifier).updateUser(
+                        id: userId,
+                        username: usernameCtrl.text.trim(),
+                        firstName: firstNameCtrl.text.trim(),
+                        lastName: lastNameCtrl.text.trim(),
+                        email: emailCtrl.text.trim(),
+                        mobileNumber: mobileCtrl.text.trim(),
+                        role: selectedRole,
+                      );
+                  if (success && mounted) {
+                    navigator.pop();
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('User updated successfully.')),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
+                child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _infoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -2940,6 +3327,169 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SnackBar(content: Text('Offence rule created successfully.')),
       );
     }
+  }
+
+  void _showEditOffenceDialog(Map<String, dynamic> offence) {
+    final editFormKey = GlobalKey<FormState>();
+    final offenceId = offence['id'];
+    final nameCtrl = TextEditingController(text: offence['offence']?.toString() ?? '');
+    final amountCtrl = TextEditingController(text: offence['challanAmount']?.toString() ?? '');
+    final dupDaysCtrl = TextEditingController(text: offence['duplicateDays']?.toString() ?? '1');
+    final graceDaysCtrl = TextEditingController(text: offence['gracePeriodDays']?.toString() ?? '0');
+    bool isActive = offence['isActive'] == true;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.edit_note, color: Color(0xFF0D9488)),
+                  SizedBox(width: 8),
+                  Text('Edit Offence Rule', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 460,
+                child: Form(
+                  key: editFormKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Offence Name
+                        TextFormField(
+                          controller: nameCtrl,
+                          decoration: InputDecoration(
+                            labelText: 'Offence Name *',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          validator: (val) => (val == null || val.trim().isEmpty) ? 'Offence name is required' : null,
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Challan Amount
+                        TextFormField(
+                          controller: amountCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
+                          decoration: InputDecoration(
+                            labelText: 'Challan Amount (₹) *',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          validator: (val) => (val == null || val.trim().isEmpty) ? 'Challan amount is required' : null,
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Duplicate Days & Grace Period Days Row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: dupDaysCtrl,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(
+                                  labelText: 'Duplicate Days *',
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: graceDaysCtrl,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(
+                                  labelText: 'Grace Period Days *',
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Active Checkbox
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Checkbox(
+                                value: isActive,
+                                activeColor: const Color(0xFF0D9488),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                onChanged: (val) {
+                                  setDialogState(() => isActive = val ?? true);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('Active', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!(editFormKey.currentState?.validate() ?? false)) return;
+
+                    final updatedData = {
+                      'offence': nameCtrl.text.trim(),
+                      'challanAmount': double.tryParse(amountCtrl.text.trim()) ?? 0.0,
+                      'duplicateDays': int.tryParse(dupDaysCtrl.text.trim()) ?? 1,
+                      'gracePeriodDays': int.tryParse(graceDaysCtrl.text.trim()) ?? 0,
+                      'isActive': isActive,
+                    };
+
+                    final messenger = ScaffoldMessenger.of(context);
+                    final nav = Navigator.of(context);
+
+                    final success = await ref.read(settingsNotifierProvider.notifier).updateOffence(
+                          offenceId,
+                          updatedData,
+                        );
+
+                    if (success && mounted) {
+                      nav.pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Offence rule updated successfully.')),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D9488),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Save Changes'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildOffenceManagement(SettingsState state) {
@@ -3323,19 +3873,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         OutlinedButton(
-                                          onPressed: () {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Edit offence configuration under construction.')),
-                                            );
-                                          },
-                                          style: OutlinedButton.styleFrom(
-                                            side: BorderSide(color: Colors.grey.shade300),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                            minimumSize: const Size(80, 28),
-                                          ),
-                                          child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                                        ),
+                                           onPressed: () => _showEditOffenceDialog(o),
+                                           style: OutlinedButton.styleFrom(
+                                             side: BorderSide(color: Colors.grey.shade300),
+                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                             minimumSize: const Size(80, 28),
+                                           ),
+                                           child: const Text('Edit', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                         ),
                                         const SizedBox(height: 6),
                                         OutlinedButton(
                                           onPressed: () => _confirmToggleOffence(offenceId, isActive),

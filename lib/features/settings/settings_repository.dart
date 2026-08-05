@@ -19,6 +19,34 @@ class SettingsRepository {
     return response.data ?? {};
   }
 
+  Future<Map<String, dynamic>> registerUser(Map<String, dynamic> userData) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/registerUser',
+        data: userData,
+      );
+      return response.data ?? {};
+    } catch (e) {
+      try {
+        return await createUser(userData);
+      } catch (_) {
+        return userData;
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> updateUser(dynamic id, Map<String, dynamic> userData) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/users/$id',
+        data: userData,
+      );
+      return response.data ?? {};
+    } catch (_) {
+      return userData;
+    }
+  }
+
   Future<void> deleteUser(int id) async {
     try {
       await _apiClient.post<dynamic>(
@@ -52,6 +80,15 @@ class SettingsRepository {
       return response.data ?? [];
     } catch (_) {
       return fetchPermissions();
+    }
+  }
+
+  Future<List<dynamic>> fetchRolePermissions(dynamic roleId) async {
+    try {
+      final response = await _apiClient.get<List<dynamic>>('/roles/permissions/$roleId');
+      return response.data ?? [];
+    } catch (_) {
+      return [];
     }
   }
 
@@ -117,6 +154,26 @@ class SettingsRepository {
       return response.data ?? {};
     } catch (e) {
       return data;
+    }
+  }
+
+  Future<Map<String, dynamic>> updateOffence(dynamic id, Map<String, dynamic> data) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/offence-config/$id',
+        data: data,
+      );
+      return response.data ?? {};
+    } catch (_) {
+      try {
+        final response = await _apiClient.post<Map<String, dynamic>>(
+          '/offence-config/update',
+          data: {'id': id, ...data},
+        );
+        return response.data ?? {};
+      } catch (_) {
+        return data;
+      }
     }
   }
 }

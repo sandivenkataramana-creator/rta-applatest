@@ -210,6 +210,63 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
   Future<bool> createNewUser({
     required String username,
+    required String password,
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String mobileNumber,
+    required String role,
+    List<int> roleIds = const [],
+    List<int> allowPermissionIds = const [],
+    List<int> denyPermissionIds = const [],
+    List<int> districtIds = const [],
+    String? signatureBase64,
+  }) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final userData = {
+        'username': username,
+        'email': email,
+        'passwordHash': password,
+        'mobileNumber': mobileNumber,
+        'firstName': firstName,
+        'lastName': lastName.isEmpty ? null : lastName,
+        'roleIds': roleIds,
+        'allowPermissionIds': allowPermissionIds,
+        'denyPermissionIds': denyPermissionIds,
+        'districtIds': districtIds,
+        'signatureBase64': signatureBase64,
+        'role': role,
+      };
+
+      await repository.registerUser(userData);
+      await loadUsers();
+      return true;
+    } catch (e) {
+      final mockNewUser = {
+        'id': DateTime.now().millisecondsSinceEpoch,
+        'username': username,
+        'email': email,
+        'passwordHash': password,
+        'mobileNumber': mobileNumber,
+        'firstName': firstName,
+        'lastName': lastName.isEmpty ? null : lastName,
+        'role': role,
+        'roleIds': roleIds,
+        'createdAt': DateTime.now().toIso8601String(),
+        'signature': signatureBase64,
+      };
+      state = state.copyWith(
+        users: [mockNewUser, ...state.users],
+        isLoading: false,
+      );
+      return true;
+    }
+  }
+
+  Future<bool> updateUser({
+    required dynamic id,
+    required String username,
     required String firstName,
     required String lastName,
     required String email,
@@ -219,33 +276,33 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isLoading: true);
     try {
       final userData = {
+        'id': id,
         'username': username,
         'firstName': firstName,
         'lastName': lastName,
         'email': email,
         'mobileNumber': mobileNumber,
         'role': role,
-        'createdAt': DateTime.now().toIso8601String(),
       };
-      
-      await repository.createUser(userData);
+      await repository.updateUser(id, userData);
       await loadUsers();
       return true;
     } catch (e) {
-      final mockNewUser = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'username': username,
-        'firstName': firstName,
-        'lastName': lastName,
-        'email': email,
-        'mobileNumber': mobileNumber,
-        'role': role,
-        'createdAt': DateTime.now().toIso8601String(),
-      };
-      state = state.copyWith(
-        users: [mockNewUser, ...state.users],
-        isLoading: false,
-      );
+      final updatedList = state.users.map((u) {
+        if (u is Map && (u['id'] == id || (u['id']?.toString() == id.toString()) || u['username'] == username)) {
+          return {
+            ...u,
+            'username': username,
+            'firstName': firstName,
+            'lastName': lastName,
+            'email': email,
+            'mobileNumber': mobileNumber,
+            'role': role,
+          };
+        }
+        return u;
+      }).toList();
+      state = state.copyWith(users: updatedList, isLoading: false);
       return true;
     }
   }
@@ -273,21 +330,18 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
   Future<List<dynamic>> fetchActivePermissions() async {
     try {
-      final list = await repository.fetchActivePermissions();
-      if (list.isNotEmpty) return list;
-    } catch (_) {}
-    return [
-      {"id": 2, "permissionName": "LIVE_FEED", "isActive": true},
-      {"id": 9, "permissionName": "SETTINGS", "isActive": true},
-      {"id": 10, "permissionName": "CHALLAN", "isActive": true},
-      {"id": 5, "permissionName": "HISTORY", "isActive": true},
-      {"id": 8, "permissionName": "SUPPORT_CENTER", "isActive": true},
-      {"id": 7, "permissionName": "DETAILES_NOT_FOUND", "isActive": true},
-      {"id": 4, "permissionName": "VEHICLE_HISTORY", "isActive": true},
-      {"id": 1, "permissionName": "DASHBOARD", "isActive": true},
-      {"id": 3, "permissionName": "BUDGET_PAGE", "isActive": true},
-      {"id": 6, "permissionName": "VEHICLE_EXPORT", "isActive": true},
-    ];
+      return await repository.fetchActivePermissions();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> fetchRolePermissions(dynamic roleId) async {
+    try {
+      return await repository.fetchRolePermissions(roleId);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<bool> createRole(String roleName, [List<int> permissionIds = const [], bool isActive = true]) async {
@@ -449,6 +503,31 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }).toList();
     state = state.copyWith(offenceConfigs: updated);
     return true;
+  }
+
+  Future<bool> updateOffence(dynamic id, Map<String, dynamic> data) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      await repository.updateOffence(id, data);
+      await loadOffenceConfigs();
+      return true;
+    } catch (_) {
+      final updated = state.offenceConfigs.map((o) {
+        if (o is Map && o['id']?.toString() == id.toString()) {
+          final Map<String, dynamic> mutable = Map<String, dynamic>.from(o);
+          if (data.containsKey('offence')) mutable['offence'] = data['offence'];
+          if (data.containsKey('challanAmount')) mutable['challanAmount'] = data['challanAmount'];
+          if (data.containsKey('duplicateDays')) mutable['duplicateDays'] = data['duplicateDays'];
+          if (data.containsKey('gracePeriodDays')) mutable['gracePeriodDays'] = data['gracePeriodDays'];
+          if (data.containsKey('isActive')) mutable['isActive'] = data['isActive'];
+          mutable['updated_time'] = DateTime.now().toIso8601String();
+          return mutable;
+        }
+        return o;
+      }).toList();
+      state = state.copyWith(offenceConfigs: updated, isLoading: false);
+      return true;
+    }
   }
 }
 

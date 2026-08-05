@@ -1091,23 +1091,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                               ),
                                               const SizedBox(height: 16),
                                               // Remarks
-                                              const Text(
-                                                'Remarks',
-                                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              TextField(
-                                                controller: remarksCtrl,
-                                                maxLines: 2,
-                                                decoration: InputDecoration(
-                                                  hintText: 'Enter Remarks (Minimum 4 lines if amount is reduced)',
-                                                  hintStyle: const TextStyle(fontSize: 12),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius: BorderRadius.circular(6),
-                                                    borderSide: BorderSide(color: Colors.grey.shade300),
-                                                  ),
-                                                ),
-                                              ),
                                             ],
                                           ),
                                         ),
@@ -1120,7 +1103,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Expanded(flex: 4, child: leftColumn),
-                                        const SizedBox(width: 24),
+                                        const SizedBox(width: 12),
                                         Expanded(flex: 5, child: rightColumn),
                                       ],
                                     );
@@ -1128,90 +1111,25 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                     return Column(
                                       children: [
                                         leftColumn,
-                                        const SizedBox(height: 24),
+                                        const SizedBox(height: 10),
                                         rightColumn,
                                       ],
                                     );
                                   }
                                 },
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 10),
 
-                              // Table for Previous VCR Challans (Image 3)
+                              // Manual Challan / Additional Offences Card
                               Card(
                                 color: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 elevation: 1,
                                 child: Padding(
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.history, size: 18, color: Colors.grey.shade700),
-                                          const SizedBox(width: 8),
-                                          const Text(
-                                            'PREVIOUS VCR CHALLANS',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF0F3260),
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Divider(),
-                                      const SizedBox(height: 12),
-                                      
-                                      // Previous VCR Table
-                                      Table(
-                                        border: TableBorder.all(color: Colors.grey.shade200),
-                                        columnWidths: const {
-                                          0: FlexColumnWidth(3),
-                                          1: FlexColumnWidth(3),
-                                          2: FlexColumnWidth(2),
-                                        },
-                                        children: [
-                                          TableRow(
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF0F3260),
-                                            ),
-                                            children: [
-                                              _buildTableCell('Vehicle Number', isHeader: true),
-                                              _buildTableCell('Total Previous Amount', isHeader: true),
-                                              _buildTableCell('View Details', isHeader: true),
-                                            ],
-                                          ),
-                                          TableRow(
-                                            children: [
-                                              _buildTableCell(vehicleNumber),
-                                              _buildTableCell('₹ ${(vehicle['challanAmount'] as num? ?? 0.0).toStringAsFixed(2)}'),
-                                              Padding(
-                                                padding: const EdgeInsets.all(4),
-                                                child: Center(
-                                                  child: OutlinedButton(
-                                                    onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber, state),
-                                                    style: OutlinedButton.styleFrom(
-                                                      side: const BorderSide(color: Color(0xFF0D9488)),
-                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                                    ),
-                                                    child: const Text(
-                                                      'View',
-                                                      style: TextStyle(color: Color(0xFF0D9488), fontSize: 11, fontWeight: FontWeight.bold),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 20),
-
-                                      // Manual Challan / Additional Offences
                                       const Text(
                                         'MANUAL CHALLAN / ADDITIONAL OFFENCES',
                                         style: TextStyle(
@@ -1220,7 +1138,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                           fontSize: 13,
                                         ),
                                       ),
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 10),
                                       LayoutBuilder(
                                         builder: (context, constraints) {
                                           final isMobile = constraints.maxWidth < 500;
@@ -1345,7 +1263,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                       ),
 
                                       if (customOffences.isNotEmpty) ...[
-                                        const SizedBox(height: 12),
+                                        const SizedBox(height: 10),
                                         ListView.builder(
                                           shrinkWrap: true,
                                           physics: const NeverScrollableScrollPhysics(),
@@ -1373,7 +1291,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                           },
                                         ),
                                       ],
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 10),
 
                                       // Total Challan Amount field on the right
                                       LayoutBuilder(
@@ -1388,10 +1306,10 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                   'Total Challan Amount',
                                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                                 ),
-                                                const SizedBox(height: 8),
+                                                const SizedBox(height: 6),
                                                 Container(
                                                   width: 150,
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                                   decoration: BoxDecoration(
                                                     border: Border.all(color: Colors.grey.shade400),
                                                     borderRadius: BorderRadius.circular(4),
@@ -1423,7 +1341,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                   const SizedBox(width: 12),
                                                   Container(
                                                     width: 150,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                                     decoration: BoxDecoration(
                                                       border: Border.all(color: Colors.grey.shade400),
                                                       borderRadius: BorderRadius.circular(4),
@@ -1592,23 +1510,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       );
     }
     return buildPlatformNetImage(clean, height: height, fit: fit, onTap: onTap);
-  }
-
-  Widget _buildTableCell(String text, {bool isHeader = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
-            color: isHeader ? Colors.white : Colors.black87,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
   }
 
   Widget _buildDetailRow(String label, String? value) {

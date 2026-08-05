@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,8 +6,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../auth/auth_models.dart';
-// legacy notifier uses an internal compatibility repository; avoid importing the
-// new `auth_repository.dart` interface here to prevent type conflicts.
+
+Map<String, dynamic> parseJwtPayload(String token) {
+  try {
+    final parts = token.split('.');
+    if (parts.length < 2) return {};
+    final normalized = base64Url.normalize(parts[1]);
+    final payloadString = utf8.decode(base64Url.decode(normalized));
+    return jsonDecode(payloadString) as Map<String, dynamic>;
+  } catch (_) {
+    return {};
+  }
+}
 
 final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((
   ref,
@@ -49,14 +60,32 @@ class _LegacyAuthRepository {
     final data = response.data ?? <String, dynamic>{};
     final access = data['token']?.toString() ?? data['accessToken']?.toString() ?? '';
     final refresh = data['refreshToken']?.toString() ?? '';
-    final role = data['role']?.toString() ?? '';
+    
+    final payload = parseJwtPayload(access);
+    final rawRoles = data['roles'] ?? payload['roles'];
+    final String role = (rawRoles is List && rawRoles.isNotEmpty)
+        ? rawRoles.first.toString()
+        : (data['role']?.toString() ?? payload['role']?.toString() ?? '');
+
+    final rawDistIds = data['districtIds'] ?? payload['districtIds'];
+    final List<int> districtIds = [];
+    if (rawDistIds is List) {
+      for (final item in rawDistIds) {
+        final parsed = int.tryParse(item.toString());
+        if (parsed != null) districtIds.add(parsed);
+      }
+    }
+
     await _storage.writeRememberMe(rememberMe);
     await _storage.writeToken(access);
     await _storage.writeRefreshToken(refresh);
     await _storage.writeUsername(username);
+    await _storage.writeDistrictIds(districtIds);
+
     return {
       'token': AuthToken(accessToken: access, refreshToken: refresh),
       'role': role,
+      'districtIds': districtIds,
     };
   }
 
@@ -67,6 +96,7 @@ class _LegacyAuthRepository {
     await _storage.deleteToken();
     await _storage.deleteRefreshToken();
     await _storage.deleteUsername();
+    await _storage.deleteDistrictIds();
     await _storage.writeRememberMe(false);
   }
 }

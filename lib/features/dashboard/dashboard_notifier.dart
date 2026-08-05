@@ -124,7 +124,12 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     String? errorMsg;
 
     try {
-      final kpiFuture = repository.fetchKpis().catchError((e) {
+      final kpiFuture = repository.fetchKpis(
+        district: district,
+        zone: zone,
+        camera: camera,
+        timeRange: timeRange,
+      ).catchError((e) {
         errorMsg ??= e.toString();
         return const KpiSummary(
           totalVehiclesToday: 0,
@@ -138,7 +143,12 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         );
       });
 
-      final trafficFuture = repository.fetchHourlyTraffic().catchError((e) {
+      final trafficFuture = repository.fetchHourlyTraffic(
+        district: district,
+        zone: zone,
+        camera: camera,
+        timeRange: timeRange,
+      ).catchError((e) {
         errorMsg ??= e.toString();
         return const <AnalyticsSeries>[];
       });

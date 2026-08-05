@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
+import '../../core/storage/secure_storage_service.dart';
 import 'dashboard_models.dart';
 import 'models/missing_certificate_model.dart';
 
@@ -9,44 +10,195 @@ class DashboardRepository {
 
   final ApiClient _apiClient;
 
-  Future<KpiSummary> fetchKpis() async {
-    // Mocking response to avoid calling the removed /dashboard API
-    return const KpiSummary(
-      totalVehiclesToday: 1205,
-      totalVehiclesWeek: 8540,
-      totalVehiclesMonth: 34120,
-      blacklistedVehicles: 45,
-      violationsDetected: 112,
-      activeCameras: 32,
-      offlineCameras: 2,
-      totalCheckposts: 15,
-    );
+  Future<KpiSummary> fetchKpis({
+    String? district,
+    String? zone,
+    String? camera,
+    String? timeRange,
+  }) async {
+    try {
+      // Execute all sub-requests in parallel for maximum performance (~300ms)
+      final results = await Future.wait([
+        fetchMissingCertificates(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: timeRange ?? 'Today',
+        ),
+        fetchMissingCertificates(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: 'This Week',
+        ),
+        fetchMissingCertificates(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: 'This Month',
+        ),
+        fetchOffenceCountData(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: timeRange ?? 'Today',
+        ),
+        fetchOffenceCountData(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: 'This Week',
+        ),
+        fetchOffenceCountData(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: 'This Month',
+        ),
+        fetchChallanCounts(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: timeRange ?? 'Today',
+        ),
+      ]);
+
+      final missingCertToday = results[0] as MissingCertificateModel;
+      final missingCertWeek = results[1] as MissingCertificateModel;
+      final missingCertMonth = results[2] as MissingCertificateModel;
+      final offenceCountsToday = results[3] as Map<String, dynamic>;
+      final offenceCountsWeek = results[4] as Map<String, dynamic>;
+      final offenceCountsMonth = results[5] as Map<String, dynamic>;
+      final challanCounts = results[6] as Map<String, String>;
+
+      int totalViolationsToday = 0;
+      offenceCountsToday.forEach((key, value) {
+        if (value is num) totalViolationsToday += value.toInt();
+      });
+
+      int totalViolationsWeek = 0;
+      offenceCountsWeek.forEach((key, value) {
+        if (value is num) totalViolationsWeek += value.toInt();
+      });
+
+      int totalViolationsMonth = 0;
+      offenceCountsMonth.forEach((key, value) {
+        if (value is num) totalViolationsMonth += value.toInt();
+      });
+
+      int seized = int.tryParse(challanCounts['seizedVehicles'] ?? '0') ?? 0;
+
+      int totalVehiclesToday = missingCertToday.vehicleCount > 0 ? missingCertToday.vehicleCount : totalViolationsToday;
+      int totalVehiclesWeek = missingCertWeek.vehicleCount > 0 ? missingCertWeek.vehicleCount : totalViolationsWeek;
+      int totalVehiclesMonth = missingCertMonth.vehicleCount > 0 ? missingCertMonth.vehicleCount : totalViolationsMonth;
+
+      return KpiSummary(
+        totalVehiclesToday: totalVehiclesToday,
+        totalVehiclesWeek: totalVehiclesWeek,
+        totalVehiclesMonth: totalVehiclesMonth,
+        blacklistedVehicles: seized,
+        violationsDetected: totalViolationsToday,
+        activeCameras: 0,
+        offlineCameras: 0,
+        totalCheckposts: 0,
+      );
+    } catch (e) {
+      debugPrint('Error fetching dynamic KPIs: $e');
+      return const KpiSummary(
+        totalVehiclesToday: 0,
+        totalVehiclesWeek: 0,
+        totalVehiclesMonth: 0,
+        blacklistedVehicles: 0,
+        violationsDetected: 0,
+        activeCameras: 0,
+        offlineCameras: 0,
+        totalCheckposts: 0,
+      );
+    }
   }
 
-  Future<List<AnalyticsSeries>> fetchHourlyTraffic() async {
-    // Mocking response to avoid calling the removed /analytics API
-    return const [
-      AnalyticsSeries(label: '00:00', value: 120),
-      AnalyticsSeries(label: '04:00', value: 80),
-      AnalyticsSeries(label: '08:00', value: 350),
-      AnalyticsSeries(label: '12:00', value: 500),
-      AnalyticsSeries(label: '16:00', value: 450),
-      AnalyticsSeries(label: '20:00', value: 300),
-    ];
+  Future<List<AnalyticsSeries>> fetchHourlyTraffic({
+    String? district,
+    String? zone,
+    String? camera,
+    String? timeRange,
+  }) async {
+    try {
+      final items = await fetchChallanDetails(
+        challanTypes: ['RAISE', 'COLLECT', 'SEIZE', 'MANUAL', 'ECHALLAN', 'E_CHALLAN'],
+        districtName: district,
+        zoneName: zone,
+        cameraId: camera,
+      );
+
+      final Map<int, int> hourlyBucket = {
+        0: 0, 4: 0, 8: 0, 12: 0, 16: 0, 20: 0
+      };
+
+      for (final dynamic item in items) {
+        if (item is! Map) continue;
+        final timeStr = item['timestamp']?.toString() ??
+            item['createdTime']?.toString() ??
+            item['createdAt']?.toString() ??
+            item['created_time']?.toString() ??
+            item['date']?.toString() ??
+            item['time']?.toString();
+        if (timeStr != null) {
+          final dt = DateTime.tryParse(timeStr);
+          if (dt != null) {
+            final hour = dt.hour;
+            final bucketKey = (hour ~/ 4) * 4;
+            hourlyBucket[bucketKey] = (hourlyBucket[bucketKey] ?? 0) + 1;
+          }
+        }
+      }
+
+      return [
+        AnalyticsSeries(label: '00:00', value: hourlyBucket[0] ?? 0),
+        AnalyticsSeries(label: '04:00', value: hourlyBucket[4] ?? 0),
+        AnalyticsSeries(label: '08:00', value: hourlyBucket[8] ?? 0),
+        AnalyticsSeries(label: '12:00', value: hourlyBucket[12] ?? 0),
+        AnalyticsSeries(label: '16:00', value: hourlyBucket[16] ?? 0),
+        AnalyticsSeries(label: '20:00', value: hourlyBucket[20] ?? 0),
+      ];
+    } catch (e) {
+      debugPrint('Error fetchHourlyTraffic dynamic: $e');
+      return const [
+        AnalyticsSeries(label: '00:00', value: 0),
+        AnalyticsSeries(label: '04:00', value: 0),
+        AnalyticsSeries(label: '08:00', value: 0),
+        AnalyticsSeries(label: '12:00', value: 0),
+        AnalyticsSeries(label: '16:00', value: 0),
+        AnalyticsSeries(label: '20:00', value: 0),
+      ];
+    }
   }
 
   Future<List<String>> fetchDistricts() async {
     final response = await _apiClient.get<List<dynamic>>('/districts');
     final districtList = response.data ?? [];
+
+    final storage = SecureStorageService();
+    final assignedIds = await storage.readDistrictIds();
+
     final names = districtList
         .map((item) {
           if (item is Map) {
+            final id = int.tryParse(item['id']?.toString() ?? '');
+            if (assignedIds.isNotEmpty && (id == null || !assignedIds.contains(id))) {
+              return null;
+            }
             return item['districtName']?.toString();
           }
           return null;
         })
         .whereType<String>()
         .toList();
+
+    if (assignedIds.isNotEmpty && names.isNotEmpty) {
+      return names;
+    }
+
     return ['Select All District', ...names];
   }
 

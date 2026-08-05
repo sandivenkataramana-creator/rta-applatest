@@ -68,6 +68,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF031718),
       body: LoadingOverlay(
         isLoading: _isLoading,
         child: Stack(
@@ -97,28 +98,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             ),
-            Column(
-              children: [
-                // Top Full-width Header Bar
-                Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xFF031A1C),
-                        Color(0xFF0A3C39),
-                        Color(0xFF0B423E),
-                      ],
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final bool isMobileWidth = constraints.maxWidth < 650;
+
+                  // ─── Header Widget ──────────────────────────────────────────
+                  final Widget headerWidget = Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF031A1C),
+                          Color(0xFF0A3C39),
+                          Color(0xFF0B423E),
+                        ],
+                      ),
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFF00F5D4), width: 2),
+                      ),
                     ),
-                    border: Border(
-                      bottom: BorderSide(color: Color(0xFF00F5D4), width: 2),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobileWidth ? 12 : 24,
+                      vertical: isMobileWidth ? 8 : 12,
                     ),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  child: SafeArea(
-                    bottom: false,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
+                    child: Builder(
+                      builder: (context) {
                         if (constraints.maxWidth >= 950) {
                           return Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -215,8 +220,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ],
                           );
-                        } else {
-                          // Mobile/Tablet responsive wrapping layout
+                        } else if (constraints.maxWidth >= 650) {
+                          // Medium Tablet view
                           return SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: Row(
@@ -249,7 +254,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       children: [
                                         Image.asset(
                                           'assets/images/telangana_logo.png',
-                                          height: 52,
+                                          height: 48,
                                           errorBuilder: (context, error, stackTrace) => const Icon(
                                             Icons.account_balance,
                                             color: Colors.white,
@@ -309,324 +314,411 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ],
                             ),
                           );
+                        } else {
+                          // Mobile phone view (< 650px): Clean 2-row layout fitting all devices
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Top Row: Telangana Logo & App Title
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Image.asset(
+                                    'assets/images/telangana_logo.png',
+                                    height: 38,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.account_balance,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'TGRTA ANPR SYSTEM',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w900,
+                                          fontStyle: FontStyle.italic,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Vehicle Identification & Enforcement',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              // Bottom Row: 3 Equal-width Minister Portraits
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildPortraitCard(
+                                      label: 'Sri A. Revanth Reddy',
+                                      subtitle: "Hon'ble CM",
+                                      assetPath: 'assets/images/revanth.png',
+                                      size: 36,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildPortraitCard(
+                                      label: 'Sri M. Bhatti Vikramarka',
+                                      subtitle: "Hon'ble Deputy CM",
+                                      assetPath: 'assets/images/bhatti.png',
+                                      size: 36,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildPortraitCard(
+                                      label: 'Sri Ponnam Prabhakar',
+                                      subtitle: "Transport Minister",
+                                      assetPath: 'assets/images/ponnam.png',
+                                      size: 36,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
                         }
                       },
                     ),
-                  ),
-                ),
-                // Center Glassmorphic Login Card
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: MediaQuery.of(context).size.width < 500 ? 12 : 24,
-                        vertical: 16,
+                  );
+
+                  // ─── Login Card Container ────────────────────────────────────
+                  final Widget cardWidget = Container(
+                    width: 460,
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth - (isMobileWidth ? 24 : 48),
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xF0082123),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: const Color(0xFF00F5D4).withValues(alpha: 0.35),
+                        width: 1.5,
                       ),
-                      child: Container(
-                        width: 460,
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width - (MediaQuery.of(context).size.width < 500 ? 24 : 48),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00F5D4).withValues(alpha: 0.12),
+                          blurRadius: 30,
+                          spreadRadius: 2,
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xF0082123), // Dark cyan/emerald glass tint
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: const Color(0xFF00F5D4).withValues(alpha: 0.35),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF00F5D4).withValues(alpha: 0.12),
-                              blurRadius: 30,
-                              spreadRadius: 2,
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: isMobileWidth ? 20 : 32,
+                        horizontal: isMobileWidth ? 16 : 36,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // TGRTA ANPR App Icon Badge
+                          Container(
+                            width: isMobileWidth ? 60 : 72,
+                            height: isMobileWidth ? 60 : 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF00F5D4),
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF00F5D4).withValues(alpha: 0.3),
+                                  blurRadius: 16,
+                                  spreadRadius: 1,
+                                ),
+                              ],
                             ),
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/app_icon.png',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: const Color(0xFF0D9488),
+                                  child: const Icon(Icons.directions_car, color: Colors.white, size: 36),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: isMobileWidth ? 12 : 16),
+                          Text(
+                            'RTA Login',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isMobileWidth ? 22 : 26,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Government of Telangana Transport Department',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: isMobileWidth ? 11.5 : 13,
+                            ),
+                          ),
+                          SizedBox(height: isMobileWidth ? 16 : 24),
+                          if (_errorMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Username',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _usernameController,
+                                  style: const TextStyle(color: Colors.black87, fontSize: 14.5),
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter username',
+                                    hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
+                                    prefixIcon: const Icon(Icons.person_outline, color: Colors.black45, size: 20),
+                                    filled: true,
+                                    fillColor: const Color(0xFFECEFF1),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Color(0xFF5CCAB8), width: 1.5),
+                                    ),
+                                  ),
+                                  validator: (value) =>
+                                      value?.isEmpty == true ? 'Enter username' : null,
+                                ),
+                                const SizedBox(height: 14),
+                                const Text(
+                                  'Password',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _passwordController,
+                                  obscureText: _obscurePassword,
+                                  style: const TextStyle(color: Colors.black87, fontSize: 14.5),
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter password',
+                                    hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
+                                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.black45, size: 20),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                        color: Colors.black45,
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                    ),
+                                    filled: true,
+                                    fillColor: const Color(0xFFECEFF1),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Color(0xFF5CCAB8), width: 1.5),
+                                    ),
+                                  ),
+                                  validator: (value) =>
+                                      value?.isEmpty == true ? 'Enter password' : null,
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => _showForgotPasswordConfirmDialog(context),
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: const Text(
+                                        'Forgot Password?',
+                                        style: TextStyle(
+                                          color: Color(0xFFFBB03B),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 48,
+                                  child: ElevatedButton(
+                                    onPressed: _login,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0D9488),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 3,
+                                      shadowColor: const Color(0xFF00F5D4).withValues(alpha: 0.4),
+                                    ),
+                                    child: const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Login',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Icon(Icons.arrow_forward, size: 16, color: Colors.white),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Center(
+                                  child: Wrap(
+                                    alignment: WrapAlignment.center,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: const [
+                                      Icon(Icons.gpp_good_outlined, color: Color(0xFF81D8B7), size: 13),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Secure Access • Authorized Personnel Only',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 10.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Center(
+                                  child: Wrap(
+                                    alignment: WrapAlignment.center,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: const [
+                                      Icon(Icons.lock_outline, color: Colors.white60, size: 11),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        '© 2026 Government of Telangana. All rights reserved.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white60,
+                                          fontSize: 9.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+
+                  return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          children: [
+                            headerWidget,
+                            Expanded(
+                              child: Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isMobileWidth ? 12 : 24,
+                                    vertical: isMobileWidth ? 16 : 24,
+                                  ),
+                                  child: cardWidget,
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: MediaQuery.of(context).size.width < 500 ? 24 : 32,
-                            horizontal: MediaQuery.of(context).size.width < 500 ? 18 : 36,
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // TGRTA ANPR App Icon Badge
-                              Container(
-                                width: 72,
-                                height: 72,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(0xFF00F5D4),
-                                    width: 2,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF00F5D4).withValues(alpha: 0.3),
-                                      blurRadius: 16,
-                                      spreadRadius: 1,
-                                    ),
-                                  ],
-                                ),
-                                child: ClipOval(
-                                  child: Image.asset(
-                                    'assets/images/app_icon.png',
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      color: const Color(0xFF0D9488),
-                                      child: const Icon(Icons.directions_car, color: Colors.white, size: 36),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'RTA Login',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Government of Telangana Transport Department',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              if (_errorMessage != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                                    ),
-                                    child: Text(
-                                      _errorMessage!,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.orangeAccent,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              Form(
-                                key: _formKey,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Username',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    TextFormField(
-                                      controller: _usernameController,
-                                      style: const TextStyle(color: Colors.black87, fontSize: 15),
-                                      decoration: InputDecoration(
-                                        hintText: 'Enter username',
-                                        hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
-                                        prefixIcon: const Icon(Icons.person_outline, color: Colors.black45, size: 20),
-                                        filled: true,
-                                        fillColor: const Color(0xFFECEFF1),
-                                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: const BorderSide(color: Color(0xFF5CCAB8), width: 1.5),
-                                        ),
-                                      ),
-                                      validator: (value) =>
-                                          value?.isEmpty == true
-                                          ? 'Enter username'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 18),
-                                    const Text(
-                                      'Password',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    TextFormField(
-                                      controller: _passwordController,
-                                      obscureText: _obscurePassword,
-                                      style: const TextStyle(color: Colors.black87, fontSize: 15),
-                                      decoration: InputDecoration(
-                                        hintText: 'Enter password',
-                                        hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
-                                        prefixIcon: const Icon(Icons.lock_outline, color: Colors.black45, size: 20),
-                                        suffixIcon: IconButton(
-                                          icon: Icon(
-                                            _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                            color: Colors.black45,
-                                            size: 20,
-                                          ),
-                                          onPressed: () {
-                                            setState(() {
-                                              _obscurePassword = !_obscurePassword;
-                                            });
-                                          },
-                                        ),
-                                        filled: true,
-                                        fillColor: const Color(0xFFECEFF1),
-                                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: const BorderSide(color: Color(0xFF5CCAB8), width: 1.5),
-                                        ),
-                                      ),
-                                      validator: (value) =>
-                                          value?.isEmpty == true
-                                          ? 'Enter password'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 18),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        TextButton(
-                                          onPressed: () => _showForgotPasswordConfirmDialog(context),
-                                          style: TextButton.styleFrom(
-                                            padding: EdgeInsets.zero,
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                          child: const Text(
-                                            'Forgot Password?',
-                                            style: TextStyle(
-                                              color: Color(0xFFFBB03B),
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 28),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      height: 52,
-                                      child: ElevatedButton(
-                                        onPressed: _login,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF0D9488),
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          elevation: 3,
-                                          shadowColor: const Color(0xFF00F5D4).withValues(alpha: 0.4),
-                                        ),
-                                        child: const Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              'Login',
-                                              strutStyle: StrutStyle(
-                                                fontSize: 16,
-                                                height: 1.3,
-                                                forceStrutHeight: true,
-                                              ),
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            SizedBox(width: 8),
-                                            Icon(Icons.arrow_forward, size: 16, color: Colors.white),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    Center(
-                                      child: Wrap(
-                                        alignment: WrapAlignment.center,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
-                                        children: const [
-                                          Icon(Icons.gpp_good_outlined, color: Color(0xFF81D8B7), size: 14),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            'Secure Access • Authorized Personnel Only',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Center(
-                                      child: Wrap(
-                                        alignment: WrapAlignment.center,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
-                                        children: const [
-                                          Icon(Icons.lock_outline, color: Colors.white60, size: 12),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            '© 2026 Government of Telangana. All rights reserved.',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              color: Colors.white60,
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -1009,19 +1101,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 : Icon(Icons.person, color: const Color(0xFF0F5D55), size: size * 0.5),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           label,
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 11,
+            fontSize: size < 45 ? 9.5 : 11,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         Text(
           subtitle,
           textAlign: TextAlign.center,
@@ -1029,7 +1121,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.8),
-            fontSize: 9,
+            fontSize: size < 45 ? 8.5 : 9,
           ),
         ),
       ],
