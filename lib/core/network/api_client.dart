@@ -50,22 +50,38 @@ class ApiClient {
           if (kDebugMode) {
             var printUri = options.uri.toString();
             if (printUri.contains('password=')) {
-              printUri = printUri.replaceAll(RegExp(r'password=[^&]*'), 'password=***');
+              printUri = printUri.replaceAll(
+                RegExp(r'password=[^&]*'),
+                'password=***',
+              );
             }
+            final authHeaderPresent = options.headers.containsKey(
+              'Authorization',
+            );
             debugPrint('→ ${options.method} $printUri');
+            debugPrint('   Authorization header present: $authHeaderPresent');
           }
           handler.next(options);
         },
         onResponse: (response, handler) {
           if (kDebugMode) {
             debugPrint(
-              '← ${response.statusCode} ${response.requestOptions.path}',
+              '← ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.uri}',
             );
+            debugPrint('   Response: ${response.data}');
           }
           handler.next(response);
         },
         onError: (err, handler) async {
-          if (kDebugMode) debugPrint('‼ ${err.type} ${err.message}');
+          if (kDebugMode) {
+            debugPrint('‼ ${err.type} ${err.message}');
+            debugPrint(
+              '   Request: ${err.requestOptions.method} ${err.requestOptions.uri}',
+            );
+            debugPrint(
+              '   Response: ${err.response?.statusCode} ${err.response?.data}',
+            );
+          }
           handler.next(err);
         },
       ),
@@ -94,7 +110,7 @@ class ApiClient {
 
   Future<Response<T>> post<T>(
     String path, {
-    Map<String, dynamic>? data,
+    dynamic data,
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
@@ -105,6 +121,25 @@ class ApiClient {
         queryParameters: queryParameters,
         options: options,
       );
+    } on DioException catch (e) {
+      throw _mapDioError(e);
+    }
+  }
+
+  Future<String> downloadFile(
+    String path,
+    String savePath, {
+    ProgressCallback? onReceiveProgress,
+    Options? options,
+  }) async {
+    try {
+      await _dio.download(
+        path,
+        savePath,
+        onReceiveProgress: onReceiveProgress,
+        options: options,
+      );
+      return savePath;
     } on DioException catch (e) {
       throw _mapDioError(e);
     }
@@ -121,7 +156,8 @@ class ApiClient {
     }
 
     final rawMsg = e.message ?? e.error?.toString() ?? '';
-    final isConnectionErr = e.type == DioExceptionType.connectionError ||
+    final isConnectionErr =
+        e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.unknown ||
         e.error is SocketException ||
         rawMsg.contains('XMLHttpRequest') ||
@@ -131,10 +167,12 @@ class ApiClient {
         rawMsg.contains('Connection refused') ||
         rawMsg.contains('NetworkError');
 
-    if (isConnectionErr && (e.response == null || e.response?.statusCode == null)) {
+    if (isConnectionErr &&
+        (e.response == null || e.response?.statusCode == null)) {
       return ApiException(
         code: 503,
-        message: 'Unable to connect to server. Please check your internet or server status and try again.',
+        message:
+            'Unable to connect to server. Please check your internet or server status and try again.',
       );
     }
 
@@ -154,12 +192,20 @@ class ApiClient {
 
     if (e.response?.data is Map && e.response?.data['message'] != null) {
       message = e.response!.data['message'].toString();
-    } else if (code == 401 || code == 403) {
-      message = e.response?.data?['message']?.toString() ?? 'Invalid username or password';
+    } else if (code == 401) {
+      message = 'Unauthorized. Please sign in again.';
+    } else if (code == 403) {
+      message =
+          'Access denied. You do not have permission to view this resource.';
+    } else if (code == 404) {
+      message = 'Resource not found.';
     } else if (code == 500 || code == 502 || code == 503 || code == 504) {
-      message = 'Server is currently unavailable ($code). Please try again later.';
-    } else if (rawMsg.contains('XMLHttpRequest') || rawMsg.contains('connection errored')) {
-      message = 'Unable to connect to server. Please check your internet or server status and try again.';
+      message =
+          'Server is currently unavailable ($code). Please try again later.';
+    } else if (rawMsg.contains('XMLHttpRequest') ||
+        rawMsg.contains('connection errored')) {
+      message =
+          'Unable to connect to server. Please check your internet or server status and try again.';
     } else if (e.message != null && e.message!.isNotEmpty) {
       message = e.message.toString();
     }

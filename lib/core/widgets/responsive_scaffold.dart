@@ -11,8 +11,8 @@ final sidebarCollapsedProvider = StateProvider<bool>((ref) => true);
 
 final navigationHistoryProvider =
     StateNotifierProvider<NavigationHistoryNotifier, List<String>>((ref) {
-  return NavigationHistoryNotifier();
-});
+      return NavigationHistoryNotifier();
+    });
 
 class NavigationHistoryNotifier extends StateNotifier<List<String>> {
   NavigationHistoryNotifier() : super([AppRoutes.dashboard]);
@@ -33,11 +33,7 @@ class NavigationHistoryNotifier extends StateNotifier<List<String>> {
 }
 
 class AppShell extends ConsumerStatefulWidget {
-  const AppShell({
-    super.key,
-    required this.child,
-    required this.activePath,
-  });
+  const AppShell({super.key, required this.child, required this.activePath});
 
   final Widget child;
   final String activePath;
@@ -105,9 +101,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ),
             ),
-            Expanded(
-              child: child,
-            ),
+            Expanded(child: child),
           ],
         ),
       );
@@ -196,7 +190,11 @@ class _AppShellState extends ConsumerState<AppShell> {
                   alignment: Alignment.center,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.notifications_none, color: Colors.white, size: 24),
+                      icon: const Icon(
+                        Icons.notifications_none,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                       onPressed: () {
                         _navigateTo('/dashboard/alerts');
                       },
@@ -230,7 +228,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       ),
                   ],
                 );
-              }
+              },
             ),
             const SizedBox(width: 8),
           ],
@@ -257,7 +255,10 @@ class _AppShellState extends ConsumerState<AppShell> {
               type: BottomNavigationBarType.fixed,
               selectedItemColor: const Color(0xFF0D9488),
               unselectedItemColor: Colors.grey,
-              selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+              selectedLabelStyle: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
               unselectedLabelStyle: const TextStyle(fontSize: 10),
               onTap: (index) {
                 if (index == 4) {
@@ -311,8 +312,9 @@ class _AppShellState extends ConsumerState<AppShell> {
         if (didPop) return;
 
         if (activePath != AppRoutes.dashboard && activePath != '/dashboard/') {
-          final previousRoute =
-              ref.read(navigationHistoryProvider.notifier).pop();
+          final previousRoute = ref
+              .read(navigationHistoryProvider.notifier)
+              .pop();
           if (previousRoute != null && previousRoute != activePath) {
             context.go(previousRoute);
           } else {
@@ -341,8 +343,6 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-
-
 class _PortalDrawer extends ConsumerWidget {
   const _PortalDrawer({
     required this.isDrawer,
@@ -358,7 +358,6 @@ class _PortalDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-
     final header = isCollapsed
         ? Container(
             height: 64.0,
@@ -366,7 +365,9 @@ class _PortalDrawer extends ConsumerWidget {
             child: IconButton(
               icon: const Icon(Icons.menu, color: Color(0xFF0D9488)),
               onPressed: () {
-                ref.read(sidebarCollapsedProvider.notifier).update((state) => !state);
+                ref
+                    .read(sidebarCollapsedProvider.notifier)
+                    .update((state) => !state);
               },
               tooltip: 'Expand Sidebar',
             ),
@@ -379,7 +380,9 @@ class _PortalDrawer extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(Icons.menu, color: Color(0xFF0D9488)),
                   onPressed: () {
-                    ref.read(sidebarCollapsedProvider.notifier).update((state) => !state);
+                    ref
+                        .read(sidebarCollapsedProvider.notifier)
+                        .update((state) => !state);
                   },
                   tooltip: 'Collapse Sidebar',
                 ),
@@ -427,7 +430,9 @@ class _PortalDrawer extends ConsumerWidget {
       if (route == AppRoutes.dashboard) {
         return activePath == AppRoutes.dashboard || activePath == '/dashboard/';
       }
-      return activePath == route || activePath.startsWith('$route/') || activePath.startsWith('$route?');
+      return activePath == route ||
+          activePath.startsWith('$route/') ||
+          activePath.startsWith('$route?');
     }
 
     final items = [
@@ -490,9 +495,9 @@ class _PortalDrawer extends ConsumerWidget {
       _DrawerItem(
         label: 'Support Center',
         icon: Icons.local_play_outlined,
-        route: AppRoutes.users,
+        route: AppRoutes.support,
         isCollapsed: isCollapsed,
-        isActive: isRouteActive(AppRoutes.users),
+        isActive: isRouteActive(AppRoutes.support),
         onNavigate: onNavigate,
       ),
       _DrawerItem(
@@ -531,9 +536,7 @@ class _PortalDrawer extends ConsumerWidget {
     );
 
     if (isDrawer) {
-      return Drawer(
-        child: content,
-      );
+      return Drawer(child: content);
     } else {
       return content;
     }
@@ -617,9 +620,7 @@ class _DrawerItem extends StatelessWidget {
               : null,
         ),
         child: ListTile(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           selected: isActive,
           selectedTileColor: Colors.transparent,
           hoverColor: hoverColor,

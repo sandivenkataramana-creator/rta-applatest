@@ -55,6 +55,10 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library to attach images to support tickets.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to attach photos to support tickets.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

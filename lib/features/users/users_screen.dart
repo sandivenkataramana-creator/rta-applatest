@@ -6,21 +6,7 @@ class UsersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final users = [
-      {'name': 'Super Admin', 'role': 'Super Admin', 'status': 'Active'},
-      {'name': 'RTA Admin', 'role': 'RTA Administrator', 'status': 'Active'},
-      {
-        'name': 'Enforcement Officer',
-        'role': 'Enforcement Officer',
-        'status': 'Active',
-      },
-      {
-        'name': 'Checkpost Officer',
-        'role': 'Checkpost Officer',
-        'status': 'Suspended',
-      },
-      {'name': 'Supervisor', 'role': 'Supervisor', 'status': 'Active'},
-    ];
+    final users = [];
 
     return Scaffold(
       body: Padding(
