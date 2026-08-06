@@ -19,6 +19,8 @@ import '../features/vehicle_classification/vehicle_classification_screen.dart';
 import '../features/vehicle_monitoring/vehicle_monitoring_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/users/users_screen.dart';
+import '../features/support/presentation/screens/support_screen.dart';
+import '../features/support/presentation/screens/support_ticket_details_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
@@ -64,10 +66,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       ShellRoute(
         builder: (context, state, child) {
-          return AppShell(
-            activePath: state.uri.path,
-            child: child,
-          );
+          return AppShell(activePath: state.uri.path, child: child);
         },
         routes: [
           GoRoute(
@@ -110,6 +109,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.users,
             builder: (context, state) => const UsersScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.support,
+            builder: (context, state) => const SupportScreen(),
+          ),
+          GoRoute(
+            path: '/support/:ticketId',
+            pageBuilder: (context, state) {
+              final ticketId = int.tryParse(
+                state.pathParameters['ticketId'] ?? '',
+              );
+              if (ticketId == null) {
+                return const MaterialPage(
+                  key: ValueKey('invalid-ticket'),
+                  child: Scaffold(body: Center(child: Text('Invalid ticket'))),
+                );
+              }
+              return CustomTransitionPage(
+                key: state.pageKey,
+                child: SupportTicketDetailsScreen(ticketId: ticketId),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+              );
+            },
           ),
           GoRoute(
             path: AppRoutes.settings,

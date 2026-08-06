@@ -12,6 +12,7 @@ class AppRoutes {
   static const analytics = '/dashboard/analytics';
   static const users = '/dashboard/users';
   static const settings = '/dashboard/settings';
+  static const support = '/dashboard/support';
 }
 
 class AppIcons {
