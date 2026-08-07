@@ -469,6 +469,14 @@ class _PortalDrawer extends ConsumerWidget {
         onNavigate: onNavigate,
       ),
       _DrawerItem(
+        label: 'Camera Health',
+        icon: Icons.health_and_safety_outlined,
+        route: AppRoutes.cameraHealth,
+        isCollapsed: isCollapsed,
+        isActive: isRouteActive(AppRoutes.cameraHealth),
+        onNavigate: onNavigate,
+      ),
+      _DrawerItem(
         label: 'Details Not Found',
         icon: Icons.error,
         route: AppRoutes.alerts,

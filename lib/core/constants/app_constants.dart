@@ -7,6 +7,7 @@ class AppRoutes {
   static const anprRecords = '/dashboard/anpr-records';
   static const liveFeed = '/dashboard/live-feed';
   static const cameras = '/dashboard/cameras';
+  static const cameraHealth = '/dashboard/camera-health';
   static const alerts = '/dashboard/alerts';
   static const reports = '/dashboard/reports';
   static const analytics = '/dashboard/analytics';

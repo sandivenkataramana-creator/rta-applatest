@@ -91,6 +91,20 @@ class ApiClient {
   final Dio _dio;
   final SecureStorageService _storage;
 
+  String get baseUrl => _dio.options.baseUrl;
+
+  String buildUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+
+    final normalizedBase = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    return '$normalizedBase$normalizedPath';
+  }
+
   static ApiClient? _instance;
   factory ApiClient(SecureStorageService storage) {
     _instance ??= ApiClient._(storage);
