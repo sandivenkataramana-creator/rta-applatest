@@ -21,6 +21,7 @@ import '../features/splash/splash_screen.dart';
 import '../features/users/users_screen.dart';
 import '../features/support/presentation/screens/support_screen.dart';
 import '../features/support/presentation/screens/support_ticket_details_screen.dart';
+import '../features/cameras/camera_health_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
@@ -93,6 +94,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.cameras,
             builder: (context, state) => const CamerasScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.cameraHealth,
+            builder: (context, state) => const CameraHealthScreen(),
           ),
           GoRoute(
             path: AppRoutes.alerts,
