@@ -63,7 +63,13 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
       ),
-      items: options.map((opt) => DropdownMenuItem<String>(value: opt, child: Text(opt, style: const TextStyle(fontSize: 13)))).toList(),
+      items: options.map((opt) {
+        String displayLabel = opt;
+        if (opt == 'Select All District') displayLabel = 'Select District';
+        if (opt == 'Select All Zone') displayLabel = 'Select Zone';
+        if (opt == 'Select All Camera') displayLabel = 'Select Camera';
+        return DropdownMenuItem<String>(value: opt, child: Text(displayLabel, style: const TextStyle(fontSize: 13)));
+      }).toList(),
       onChanged: onChanged,
     );
   }
@@ -302,104 +308,97 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const PageHeaderBanner(
-                title: 'Details Not Found Records',
-                subtitle: 'Government of Telangana Transport Department',
-              ),
-              const SizedBox(height: 16),
-              Container(
-                decoration: const BoxDecoration(color: Color(0xFFF3F6F6)),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final districtDropdown = _buildDropdownField(
-                      hint: 'Select District',
-                      value: _localDistrict,
-                      options: state.districts,
-                      onChanged: (value) {
-                        setState(() {
-                          _localDistrict = value ?? 'Select All District';
-                          _localZone = 'Select All Zone';
-                          _localCamera = 'Select All Camera';
-                        });
-                        if (value != null && value != 'Select All District') {
-                          notifier.fetchZonesForDistrict(value);
-                        } else {
-                          notifier.resetZones();
-                        }
+            child: Container(
+              decoration: const BoxDecoration(color: Color(0xFFF3F6F6)),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final districtDropdown = _buildDropdownField(
+                    hint: 'Select District',
+                    value: _localDistrict,
+                    options: state.districts,
+                    onChanged: (value) {
+                      setState(() {
+                        _localDistrict = value ?? 'Select All District';
+                        _localZone = 'Select All Zone';
+                        _localCamera = 'Select All Camera';
+                      });
+                      if (value != null && value != 'Select All District') {
+                        notifier.fetchZonesForDistrict(value);
+                      } else {
+                        notifier.resetZones();
+                      }
+                      notifier.resetCameras();
+                    },
+                  );
+
+                  final zoneDropdown = _buildDropdownField(
+                    hint: 'Select Zone',
+                    value: _localZone,
+                    options: state.zones,
+                    onChanged: (value) {
+                      setState(() {
+                        _localZone = value ?? 'Select All Zone';
+                        _localCamera = 'Select All Camera';
+                      });
+                      if (value != null && value != 'Select All Zone') {
+                        notifier.fetchCamerasForZone(value);
+                      } else {
                         notifier.resetCameras();
-                      },
-                    );
+                      }
+                    },
+                  );
 
-                    final zoneDropdown = _buildDropdownField(
-                      hint: 'Select Zone',
-                      value: _localZone,
-                      options: state.zones,
-                      onChanged: (value) {
-                        setState(() {
-                          _localZone = value ?? 'Select All Zone';
-                          _localCamera = 'Select All Camera';
-                        });
-                        if (value != null && value != 'Select All Zone') {
-                          notifier.fetchCamerasForZone(value);
-                        } else {
-                          notifier.resetCameras();
-                        }
-                      },
-                    );
+                  final cameraDropdown = _buildDropdownField(
+                    hint: 'Select Camera',
+                    value: _localCamera,
+                    options: state.cameras,
+                    onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
+                  );
 
-                    final cameraDropdown = _buildDropdownField(
-                      hint: 'Select Camera',
-                      value: _localCamera,
-                      options: state.cameras,
-                      onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
-                    );
+                  final applyButton = FilledButton(
+                    onPressed: () {
+                      notifier.updateSelectedFilters(district: _localDistrict, zone: _localZone, camera: _localCamera);
+                      setState(() => _currentPage = 1);
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    ),
+                    child: const Text('Apply Filters  →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  );
 
-                    final applyButton = FilledButton(
-                      onPressed: () {
-                        notifier.updateSelectedFilters(district: _localDistrict, zone: _localZone, camera: _localCamera);
-                        setState(() => _currentPage = 1);
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  final filterButton = OutlinedButton.icon(
+                    onPressed: () => setState(() => _showFilters = !_showFilters),
+                    icon: Icon(
+                      _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                      size: 18,
+                      color: const Color(0xFF0D9488),
+                    ),
+                    label: Text(
+                      _showFilters ? 'Hide Filter' : 'Filter',
+                      style: const TextStyle(
+                        color: Color(0xFF0D9488),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
-                      child: const Text('Apply Filters  →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    );
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF0D9488)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                  );
 
-                    final filterButton = OutlinedButton.icon(
-                      onPressed: () => setState(() => _showFilters = !_showFilters),
-                      icon: Icon(
-                        _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
-                        size: 18,
-                        color: const Color(0xFF0D9488),
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      PageHeaderBanner(
+                        title: 'Details Not Found Records',
+                        subtitle: 'Government of Telangana Transport Department',
+                        action: filterButton,
                       ),
-                      label: Text(
-                        _showFilters ? 'Hide Filter' : 'Filter',
-                        style: const TextStyle(
-                          color: Color(0xFF0D9488),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF0D9488)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      ),
-                    );
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: filterButton,
-                        ),
-                        if (_showFilters) ...[
+                      if (_showFilters) ...[
                           const SizedBox(height: 12),
                           Container(
                             padding: const EdgeInsets.all(16),
@@ -436,11 +435,6 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                             ),
                           ),
                         ],
-                      ],
-                    );
-                  },
-                ),
-              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -650,13 +644,17 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                   );
                 },
               ),
+              const SizedBox(height: 16),
               _buildPaginationControls(totalItems, _itemsPerPage, totalPages),
             ],
-          ),
-        ),
+          );
+        },
       ),
     ),
-  );
+  ),
+),
+),
+);
   }
 
   Widget _buildPaginationControls(int totalItems, int itemsPerPage, int totalPages) {

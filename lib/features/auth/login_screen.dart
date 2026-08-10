@@ -616,12 +616,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 const SizedBox(height: 20),
                                 SizedBox(
                                   width: double.infinity,
-                                  height: 48,
+                                  height: 52,
                                   child: ElevatedButton(
                                     onPressed: _login,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF0D9488),
                                       foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
@@ -637,6 +638,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.white,
+                                            height: 1.2,
                                           ),
                                         ),
                                         SizedBox(width: 8),

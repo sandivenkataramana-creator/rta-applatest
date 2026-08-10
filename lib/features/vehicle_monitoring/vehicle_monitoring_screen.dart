@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/utils/uppercase_formatter.dart';
+import '../../core/utils/pdf_helper.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
@@ -13,6 +16,7 @@ import '../../core/widgets/network_image_helper.dart';
 import '../../core/widgets/image_zoom_helper.dart';
 import 'vehicle_monitoring_models.dart';
 import 'vehicle_monitoring_repository.dart';
+import 'previous_vcr_reports_dialog.dart';
 
 final vehicleMonitoringProvider =
     StateNotifierProvider.autoDispose<VehicleMonitoringNotifier, VehicleMonitoringState>((ref) {
@@ -138,13 +142,27 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
     state = state.copyWith(isLoading: true);
     try {
       final selectedCamId = state.cameraLocationToId[state.selectedCamera] ?? state.selectedCamera;
-      final results = await repository.fetchViolations(
+      var results = await repository.fetchViolations(
         violationType: state.selectedViolationType,
         districtName: state.selectedDistrict,
         zoneName: state.selectedZone,
         cameraId: selectedCamId,
         vehicleType: state.selectedVehicleType,
       );
+
+      if (results.isEmpty) {
+        final notifs = await repository.fetchNotifications(
+          violationType: state.selectedViolationType,
+          districtName: state.selectedDistrict,
+          zoneName: state.selectedZone,
+          cameraId: selectedCamId,
+          vehicleType: state.selectedVehicleType,
+        );
+        if (notifs.isNotEmpty) {
+          results = notifs;
+        }
+      }
+
       state = state.copyWith(violations: results, isLoading: false);
     } catch (error) {
       state = state.copyWith(error: error.toString(), isLoading: false);
@@ -278,6 +296,23 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
 
   void updateSearch(String value) {
     state = state.copyWith(searchText: value);
+    searchVehicleDynamic(value);
+  }
+
+  Future<void> searchVehicleDynamic(String query) async {
+    final cleanQuery = query.replaceAll(RegExp(r'\s+'), '').trim();
+    if (cleanQuery.isEmpty) {
+      fetchViolations();
+      return;
+    }
+
+    state = state.copyWith(isLoading: true);
+    try {
+      final results = await repository.searchVehicle(cleanQuery);
+      state = state.copyWith(violations: results, isLoading: false);
+    } catch (error) {
+      state = state.copyWith(error: error.toString(), isLoading: false);
+    }
   }
 
   void _startAutoRefresh() {
@@ -401,33 +436,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
   void _showNotificationHistoryDetailsDialog(BuildContext context, String vehicleNumber, VehicleMonitoringState state) {
     final cleanVehicleNo = vehicleNumber.replaceAll(RegExp(r'\s+'), '').toUpperCase();
 
-    // Extract live history records for this specific vehicle from state.violations & state.notifications
-    final List<Map<String, String>> historyRecords = [];
-
-    final allSources = [...state.violations, ...state.notifications];
-    for (final item in allSources) {
-      if (item is Map<String, dynamic>) {
-        final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-        final vNo = (vehicle['vehicleNumber'] ?? item['vehicleNumber'] ?? '').toString().replaceAll(RegExp(r'\s+'), '').toUpperCase();
-
-        if (cleanVehicleNo.isNotEmpty && vNo.contains(cleanVehicleNo)) {
-          final id = item['id']?.toString() ?? item['notificationId']?.toString() ?? item['violationId']?.toString() ?? 'N/A';
-          final notification = item['offence']?.toString() ?? item['violationType']?.toString() ?? item['remarks']?.toString() ?? item['notification']?.toString() ?? 'Violation Record';
-          final amount = (item['amount'] ?? item['fineAmount'] ?? item['challanAmount'] ?? '0.00').toString();
-          final dateTime = _formatDateTime(item['createdTime']?.toString() ?? item['dateTime']?.toString() ?? vehicle['imageDetectionTime']?.toString());
-          final status = (item['status'] ?? item['paymentStatus'] ?? 'UNPAID').toString().toUpperCase();
-
-          historyRecords.add({
-            'id': id,
-            'notification': notification,
-            'amount': amount,
-            'dateTime': dateTime,
-            'status': status,
-          });
-        }
-      }
-    }
-
     showDialog(
       context: context,
       builder: (context) {
@@ -437,7 +445,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(
-              maxWidth: 700,
+              maxWidth: 800,
               maxHeight: 600,
             ),
             child: Column(
@@ -445,7 +453,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
               children: [
                 // Header
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
@@ -459,7 +467,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         child: Text(
                           'Notification History Details - $vehicleNumber',
                           style: const TextStyle(
-                            fontSize: 13.5,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF0F3260),
                           ),
@@ -478,111 +486,202 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                   ),
                 ),
 
-                // Table Body / Empty State
+                // Table Body using FutureBuilder to fetch real history records from API + local state fallback
                 Expanded(
-                  child: historyRecords.isEmpty
-                      ? Center(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: ref.read(vehicleMonitoringProvider.notifier).repository.fetchVcrHistory(vehicleNumber).then((list) async {
+                      if (list.isNotEmpty) return list;
+
+                      // Local fallback from state.violations & state.notifications
+                      final List<Map<String, dynamic>> fallback = [];
+                      final allSources = [...state.violations, ...state.notifications];
+                      for (final item in allSources) {
+                        if (item is Map<String, dynamic>) {
+                          final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+                          final vNo = (vehicle['vehicleNumber'] ?? item['vehicleNumber'] ?? '').toString().replaceAll(RegExp(r'\s+'), '').toUpperCase();
+
+                          if (cleanVehicleNo.isNotEmpty && (vNo == cleanVehicleNo || vNo.contains(cleanVehicleNo))) {
+                            fallback.add(item);
+                          }
+                        }
+                      }
+                      return fallback;
+                    }),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                      }
+
+                      final rawRecords = snapshot.data ?? [];
+
+                      // Filter out "All Clear" non-violation entries
+                      final violationRecordsOnly = rawRecords.where((item) {
+                        final notifText = (item['notification'] ?? item['offence'] ?? item['violationType'] ?? item['remarks'] ?? '').toString().trim().toLowerCase();
+                        return notifText.isNotEmpty && notifText != 'all clear' && notifText != 'all_clear';
+                      }).toList();
+
+                      if (violationRecordsOnly.isEmpty) {
+                        return Center(
                           child: Padding(
                             padding: const EdgeInsets.all(24.0),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+                                Icon(Icons.check_circle_outline, size: 48, color: Colors.green.shade400),
                                 const SizedBox(height: 12),
                                 Text(
-                                  'No previous VCR reports found for $vehicleNumber',
+                                  'No violation notifications found for $vehicleNumber',
                                   style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
                           ),
-                        )
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          padding: const EdgeInsets.all(12),
-                          child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minWidth: 780),
-                        child: Table(
-                          border: TableBorder.all(color: Colors.grey.shade300, width: 0.8),
-                          columnWidths: const {
-                            0: FlexColumnWidth(1.2), // ID
-                            1: FlexColumnWidth(4.5), // Notification
-                            2: FlexColumnWidth(1.2), // Amount
-                            3: FlexColumnWidth(2.2), // Date & Time
-                            4: FlexColumnWidth(1.8), // Status
-                          },
-                          children: [
-                            // Table Header
-                            const TableRow(
-                              decoration: BoxDecoration(color: Color(0xFF1E3A8A)),
+                        );
+                      }
+
+                      // Format history records for display
+                      final historyRecords = violationRecordsOnly.map((item) {
+                        final id = (item['id'] ?? item['notificationId'] ?? item['violationId'] ?? item['vcrNo'] ?? item['challanNo'] ?? '').toString();
+                        
+                        // Parse notification text (e.g. "INSURANCE_CERTIFICATE expired on 2025-09-27")
+                        String notification = (item['notification'] ?? item['offence'] ?? item['violationType'] ?? item['remarks'] ?? item['offenceName'] ?? '').toString();
+                        if (notification.isEmpty || notification == 'N/A') {
+                          notification = 'Violation Record';
+                        }
+
+                        // Parse amount with commas formatting (e.g. 650.00 or 0.00)
+                        final rawAmt = item['totalFineAmount'] ?? item['fineAmount'] ?? item['amount'] ?? item['challanAmount'] ?? 0;
+                        final double amtVal = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
+                        final String amountStr = NumberFormat('#,##0.00').format(amtVal);
+
+                        // Parse date & time
+                        final rawDate = item['createdAt'] ?? item['createdTime'] ?? item['dateTime'] ?? item['timestamp'] ?? item['date'];
+                        final dateTimeStr = _formatDateTime(rawDate?.toString());
+
+                        // Parse status badge (e.g. "GRACE PERIOD", "DUPLICATE", "UNPAID", "")
+                        String statusStr = (item['status'] ?? item['paymentStatus'] ?? '').toString().trim();
+                        if (statusStr.isEmpty || statusStr == 'null') {
+                          final offStatuses = item['offenceStatuses'];
+                          if (offStatuses != null && offStatuses is String && offStatuses.contains(':')) {
+                            if (offStatuses.contains('GRACE PERIOD') || offStatuses.contains('GRACE_PERIOD')) {
+                              statusStr = 'GRACE PERIOD';
+                            } else if (offStatuses.contains('UNPAID')) {
+                              statusStr = 'UNPAID';
+                            } else if (offStatuses.contains('DUPLICATE')) {
+                              statusStr = 'DUPLICATE';
+                            } else if (offStatuses.contains('PAID')) {
+                              statusStr = 'PAID';
+                            }
+                          }
+                        }
+                        if (statusStr == 'null') statusStr = '';
+
+                        return {
+                          'id': id.isNotEmpty ? id : 'N/A',
+                          'notification': notification,
+                          'amount': amountStr,
+                          'dateTime': dateTimeStr,
+                          'status': statusStr,
+                        };
+                      }).toList();
+
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.vertical,
+                        padding: const EdgeInsets.all(12),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minWidth: 760),
+                            child: Table(
+                              border: TableBorder.all(color: Colors.grey.shade300, width: 0.8),
+                              columnWidths: const {
+                                0: FlexColumnWidth(1.2), // ID
+                                1: FlexColumnWidth(4.2), // Notification
+                                2: FlexColumnWidth(1.5), // Amount
+                                3: FlexColumnWidth(2.3), // Date & Time
+                                4: FlexColumnWidth(1.8), // Status
+                              },
                               children: [
-                                Padding(padding: EdgeInsets.all(10), child: Text('ID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                                Padding(padding: EdgeInsets.all(10), child: Text('Notification', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                                Padding(padding: EdgeInsets.all(10), child: Text('Amount', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                                Padding(padding: EdgeInsets.all(10), child: Text('Date & Time', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                                Padding(padding: EdgeInsets.all(10), child: Text('Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                // Dark Blue Table Header matching Image 2
+                                const TableRow(
+                                  decoration: BoxDecoration(color: Color(0xFF1E3A8A)),
+                                  children: [
+                                    Padding(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text('ID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                    Padding(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text('Notification', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                    Padding(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text('Amount', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                    Padding(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text('Date & Time', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                    Padding(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text('Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                  ],
+                                ),
+
+                                // Table Data Rows matching Image 2
+                                ...historyRecords.asMap().entries.map((entry) {
+                                  final idx = entry.key;
+                                  final record = entry.value;
+                                  final status = record['status'] ?? '';
+                                  final statusUpper = status.toUpperCase();
+
+                                  Color? badgeBg;
+                                  Color? badgeText;
+                                  if (statusUpper == 'GRACE PERIOD') {
+                                    badgeBg = const Color(0xFFF59E0B);
+                                    badgeText = Colors.black87;
+                                  } else if (statusUpper == 'DUPLICATE') {
+                                    badgeBg = const Color(0xFF10B981);
+                                    badgeText = Colors.white;
+                                  } else if (statusUpper == 'UNPAID') {
+                                    badgeBg = const Color(0xFFEF4444);
+                                    badgeText = Colors.white;
+                                  } else if (statusUpper == 'PAID' || statusUpper == 'COLLECTED') {
+                                    badgeBg = const Color(0xFF28A745);
+                                    badgeText = Colors.white;
+                                  } else if (statusUpper.isNotEmpty) {
+                                    badgeBg = const Color(0xFFF59E0B);
+                                    badgeText = Colors.black87;
+                                  }
+
+                                  return TableRow(
+                                    decoration: BoxDecoration(
+                                      color: idx % 2 == 0 ? Colors.white : const Color(0xFFF8FAFC),
+                                    ),
+                                    children: [
+                                      Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text(record['id']!, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                                      Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text(record['notification']!, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                                      Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text(record['amount']!, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                                      Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12), child: Text(record['dateTime']!, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                        child: statusUpper.isNotEmpty && badgeBg != null
+                                            ? Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: badgeBg,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    status,
+                                                    style: TextStyle(
+                                                      color: badgeText,
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  );
+                                }),
                               ],
                             ),
-
-                            // Table Data Rows
-                            ...historyRecords.asMap().entries.map((entry) {
-                              final idx = entry.key;
-                              final record = entry.value;
-                              final status = record['status'] ?? '';
-
-                              Color badgeBg;
-                              Color badgeText;
-                              if (status == 'DUPLICATE') {
-                                badgeBg = const Color(0xFF10B981);
-                                badgeText = Colors.white;
-                              } else if (status == 'UNPAID') {
-                                badgeBg = const Color(0xFFEF4444);
-                                badgeText = Colors.white;
-                              } else {
-                                badgeBg = const Color(0xFFF59E0B);
-                                badgeText = const Color(0xFF78350F);
-                              }
-
-                              return TableRow(
-                                decoration: BoxDecoration(
-                                  color: idx % 2 == 0 ? Colors.white : const Color(0xFFF8FAFC),
-                                ),
-                                children: [
-                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['id']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
-                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['notification']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
-                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['amount']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
-                                  Padding(padding: const EdgeInsets.all(10), child: Text(record['dateTime']!, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
-                                  Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: badgeBg,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          status,
-                                          style: TextStyle(
-                                            color: badgeText,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -614,29 +713,17 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     final String imgUrl = rawImgUrl.trim();
 
     // Available offences for selection (LIST OF OFFENCES) dynamically resolved from API offence-config
-    final List<Map<String, dynamic>> sourceConfigs = state.offenceConfigs.isNotEmpty
-        ? state.offenceConfigs
-        : const [
-            {'offence': 'PUC_CERTIFICATE', 'challanAmount': 300.0},
-            {'offence': 'REGISTRATION_CERTIFICATE', 'challanAmount': 350.0},
-            {'offence': 'INSURANCE_CERTIFICATE', 'challanAmount': 650.0},
-            {'offence': 'FITNESS_CERTIFICATE', 'challanAmount': 450.0},
-            {'offence': 'PERMITTED_CERTIFICATE', 'challanAmount': 500.0},
-            {'offence': 'NO_HELMET_CERTIFICATE', 'challanAmount': 150.0},
-            {'offence': 'TRIPLE_RIDING_CERTIFICATE', 'challanAmount': 300.0},
-            {'offence': 'ROAD_TAX_CERTIFICATE', 'challanAmount': 250.0},
-            {'offence': 'NO_SEATBELT_CERTIFICATE', 'challanAmount': 200.0},
-            {'offence': 'MOBILE_USE_CERTIFICATE', 'challanAmount': 500.0},
-          ];
+    final List<Map<String, dynamic>> sourceConfigs = state.offenceConfigs;
 
     final List<Map<String, dynamic>> availableOffences = sourceConfigs.map((cfg) {
-      final name = cfg['offence']?.toString() ?? '';
-      final double amount = (cfg['challanAmount'] as num? ?? 250.0).toDouble();
+      final name = (cfg['offence'] ?? cfg['offenceName'] ?? cfg['name'] ?? '').toString();
+      final rawAmt = cfg['challanAmount'] ?? cfg['amount'] ?? cfg['fineAmount'] ?? cfg['penalty'] ?? 0.0;
+      final double amount = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
       return {
         'name': name,
         'amount': amount,
       };
-    }).toList();
+    }).where((e) => (e['name'] as String).isNotEmpty).toList();
 
     final Set<Map<String, dynamic>> selectedOffences = {};
     
@@ -695,7 +782,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                 borderRadius: BorderRadius.circular(16),
               ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 800),
+                constraints: const BoxConstraints(maxWidth: 1300, maxHeight: 920),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Column(
@@ -800,7 +887,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                       // Scrollable Body
                       Expanded(
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -860,7 +947,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(height: 16),
+                                      const SizedBox(height: 8),
 
                                       // Owner Information Card
                                       Card(
@@ -868,7 +955,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                         elevation: 1,
                                         child: Padding(
-                                          padding: const EdgeInsets.all(16),
+                                          padding: const EdgeInsets.all(12),
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
@@ -904,7 +991,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                         elevation: 1,
                                         child: Padding(
-                                          padding: const EdgeInsets.all(16),
+                                          padding: const EdgeInsets.all(12),
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
@@ -1089,7 +1176,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                                   ),
                                                 ],
                                               ),
-                                              const SizedBox(height: 16),
+                                              const SizedBox(height: 8),
                                               // Remarks
                                             ],
                                           ),
@@ -1103,7 +1190,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Expanded(flex: 4, child: leftColumn),
-                                        const SizedBox(width: 12),
+                                        const SizedBox(width: 8),
                                         Expanded(flex: 5, child: rightColumn),
                                       ],
                                     );
@@ -1111,14 +1198,14 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                     return Column(
                                       children: [
                                         leftColumn,
-                                        const SizedBox(height: 10),
+                                        const SizedBox(height: 8),
                                         rightColumn,
                                       ],
                                     );
                                   }
                                 },
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 8),
 
                               // Manual Challan / Additional Offences Card
                               Card(
@@ -1138,7 +1225,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                           fontSize: 13,
                                         ),
                                       ),
-                                      const SizedBox(height: 10),
+                                      const SizedBox(height: 8),
                                       LayoutBuilder(
                                         builder: (context, constraints) {
                                           final isMobile = constraints.maxWidth < 500;
@@ -1263,7 +1350,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                       ),
 
                                       if (customOffences.isNotEmpty) ...[
-                                        const SizedBox(height: 10),
+                                        const SizedBox(height: 8),
                                         ListView.builder(
                                           shrinkWrap: true,
                                           physics: const NeverScrollableScrollPhysics(),
@@ -1291,7 +1378,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                           },
                                         ),
                                       ],
-                                      const SizedBox(height: 10),
+                                      const SizedBox(height: 8),
 
                                       // Total Challan Amount field on the right
                                       LayoutBuilder(
@@ -1368,111 +1455,463 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1),
+                              const SizedBox(height: 8),
 
-                      // Footer buttons container
-                      Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            ElevatedButton(
-                              onPressed: () {
-                                customNameCtrl.dispose();
-                                customAmountCtrl.dispose();
-                                remarksCtrl.dispose();
-                                Navigator.of(context).pop();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6C757D),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              // Remarks Card
+                              Card(
+                                color: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                elevation: 1,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'REMARKS',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F3260),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      const Divider(),
+                                      const SizedBox(height: 8),
+                                      TextField(
+                                        controller: remarksCtrl,
+                                        maxLines: 4,
+                                        minLines: 2,
+                                        style: const TextStyle(fontSize: 13),
+                                        decoration: InputDecoration(
+                                          hintText: 'Enter any additional remarks or observations...',
+                                          hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(6),
+                                            borderSide: BorderSide(color: Colors.grey.shade300),
+                                          ),
+                                          contentPadding: const EdgeInsets.all(12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              child: const Text('Close', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => _showNotificationHistoryDetailsDialog(context, vehicleNumber, state),
-                              icon: const Icon(Icons.description, size: 16, color: Colors.black87),
-                              label: const Text('Previous VCR Reports', style: TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold)),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Colors.grey.shade400),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                            ),
-                            OutlinedButton(
-                              onPressed: () {
-                                _showDriverDetailsAndSignatureDialog(
-                                  context,
-                                  actionType: 'Collect Fine',
-                                  item: item,
-                                  selectedOffences: selectedOffences.toList(),
-                                  customOffences: customOffences,
-                                  totalChallanAmount: totalChallanAmount,
-                                  remarksText: remarksCtrl.text,
-                                  ref: ref,
-                                );
-                              },
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFF28A745)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              ),
-                              child: const Text('Collect', style: TextStyle(color: Color(0xFF28A745), fontSize: 13, fontWeight: FontWeight.bold)),
-                            ),
-                             ElevatedButton(
-                              onPressed: () {
-                                _showDriverDetailsAndSignatureDialog(
-                                  context,
-                                  actionType: 'Raise Challan',
-                                  item: item,
-                                  selectedOffences: selectedOffences.toList(),
-                                  customOffences: customOffences,
-                                  totalChallanAmount: totalChallanAmount,
-                                  remarksText: remarksCtrl.text,
-                                  ref: ref,
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF198754),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              ),
-                              child: const Text('Raise Challan', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                            ),
-                             ElevatedButton(
-                              onPressed: () {
-                                _showDriverDetailsAndSignatureDialog(
-                                  context,
-                                  actionType: 'Seize Vehicle',
-                                  item: item,
-                                  selectedOffences: selectedOffences.toList(),
-                                  customOffences: customOffences,
-                                  totalChallanAmount: totalChallanAmount,
-                                  remarksText: remarksCtrl.text,
-                                  ref: ref,
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFDC3545),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              ),
-                              child: const Text('Seize Vehicle', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                              // Previous VCR Challans Card
+                              FutureBuilder<List<Map<String, dynamic>>>(
+                                future: ref.read(vehicleMonitoringProvider.notifier).repository.fetchVcrHistory(vehicleNumber).then((list) async {
+                                  if (list.isNotEmpty) {
+                                    final validVcrs = <Map<String, dynamic>>[];
+                                    final seenKeys = <String>{};
+
+                                    for (final item in list) {
+                                      final notif = (item['notification'] ?? item['offence'] ?? item['violationType'] ?? item['remarks'] ?? '').toString().trim().toLowerCase();
+                                      if (notif == 'all clear' || notif == 'all_clear') continue;
+
+                                      final rawAmt = item['totalFineAmount'] ?? item['fineAmount'] ?? item['challanAmount'] ?? item['amount'] ?? item['totalAmount'] ?? 0.0;
+                                      final amt = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
+
+                                      final id = (item['id'] ?? item['vcrNo'] ?? item['challanNo'] ?? item['vehicleRecordId'] ?? '').toString();
+                                      final key = id.isNotEmpty ? id : '${notif}_$amt';
+                                      if (seenKeys.contains(key)) continue;
+                                      seenKeys.add(key);
+
+                                      validVcrs.add({
+                                        ...item,
+                                        'vehicleNumber': (item['vehicleNumber'] ?? vehicleNumber).toString(),
+                                        'challanAmount': amt,
+                                        'notification': notif,
+                                      });
+                                    }
+                                    if (validVcrs.isNotEmpty) {
+                                      final double totalAmt = validVcrs.fold(0.0, (sum, it) => sum + (it['challanAmount'] as double? ?? 0.0));
+                                      return [
+                                        {
+                                          'vehicleNumber': vehicleNumber,
+                                          'challanAmount': totalAmt,
+                                          'status': validVcrs.first['status'] ?? 'PENDING',
+                                          'createdTime': validVcrs.first['createdTime'] ?? '',
+                                        }
+                                      ];
+                                    }
+                                  }
+
+                                  final cleanVehicleNo = vehicleNumber.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+                                  final vcrSources = [...state.violations, ...state.notifications];
+                                  final matches = <Map<String, dynamic>>[];
+                                  final seenKeys = <String>{};
+
+                                  for (final it in vcrSources) {
+                                    if (it is Map) {
+                                      final vObj = it['vehicle'];
+                                      String vNo = '';
+                                      if (vObj is Map) {
+                                        vNo = (vObj['vehicleNumber'] ?? vObj['vehicleNo'] ?? vObj['registrationNumber'] ?? '').toString();
+                                      }
+                                      if (vNo.isEmpty) {
+                                        vNo = (it['vehicleNumber'] ?? it['vehicleNo'] ?? it['registrationNumber'] ?? '').toString();
+                                      }
+                                      final cleanVNo = vNo.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+                                      if (cleanVNo == cleanVehicleNo) {
+                                        final notif = (it['notification'] ?? it['offence'] ?? it['remarks'] ?? '').toString().trim().toLowerCase();
+                                        if (notif == 'all clear' || notif == 'all_clear') continue;
+
+                                        final rawAmt = (it['totalFineAmount'] ?? it['fineAmount'] ?? it['challanAmount'] ?? it['amount'] ?? it['totalAmount'] ?? 0.0);
+                                        final amt = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
+
+                                        final id = (it['id'] ?? it['notificationId'] ?? it['vcrNo'] ?? '').toString();
+                                        final key = id.isNotEmpty ? id : '${notif}_$amt';
+                                        if (seenKeys.contains(key)) continue;
+                                        seenKeys.add(key);
+
+                                        matches.add({
+                                          'vehicleNumber': vehicleNumber,
+                                          'challanAmount': amt,
+                                          'status': it['status'] ?? 'PENDING',
+                                          'createdTime': it['createdTime'] ?? it['timestamp'] ?? it['date'] ?? '',
+                                        });
+                                      }
+                                    }
+                                  }
+
+                                  if (matches.isNotEmpty) {
+                                    final double totalAmt = matches.fold(0.0, (sum, it) => sum + (it['challanAmount'] as double? ?? 0.0));
+                                    return [
+                                      {
+                                        'vehicleNumber': vehicleNumber,
+                                        'challanAmount': totalAmt,
+                                        'status': matches.first['status'] ?? 'PENDING',
+                                        'createdTime': matches.first['createdTime'] ?? '',
+                                      }
+                                    ];
+                                  }
+
+                                  // Fallback 2: Build record from current vehicle item offences / fine amount if > 0
+                                  final double offencesAmt = selectedOffences.fold(0.0, (sum, o) => sum + (o['amount'] as num? ?? 0.0).toDouble());
+                                  final rawItemAmt = item['totalFineAmount'] ?? item['fineAmount'] ?? item['challanAmount'] ?? item['amount'] ?? item['totalAmount'];
+                                  final double itemAmt = rawItemAmt is num ? rawItemAmt.toDouble() : (double.tryParse(rawItemAmt?.toString() ?? '') ?? 0.0);
+                                  final double displayAmt = offencesAmt > 0 ? offencesAmt : itemAmt;
+
+                                  if (displayAmt <= 0) return [];
+
+                                  return [
+                                    {
+                                      'vehicleNumber': vehicleNumber,
+                                      'challanAmount': displayAmt,
+                                      'status': item['status'] ?? 'PENDING',
+                                      'createdTime': item['createdTime'] ?? item['timestamp'] ?? '',
+                                    }
+                                  ];
+                                }),
+                                builder: (context, snapshot) {
+                                  final vcrList = snapshot.data ?? [];
+                                  final count = vcrList.length;
+
+                                  return Card(
+                                    color: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 1,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade100,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Icon(Icons.access_time_outlined, size: 18, color: Colors.grey.shade700),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  'PREVIOUS VCR CHALLANS  $count RECORDS',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF0F3260),
+                                                    fontSize: 13,
+                                                    letterSpacing: 0.3,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+
+                                          // Navy Blue Table Header
+                                          Container(
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF0F3260),
+                                              borderRadius: BorderRadius.all(Radius.circular(4)),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                            child: const Row(
+                                              children: [
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    'VEHICLE',
+                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    'PREVIOUS AMOUNT',
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 2,
+                                                  child: Text(
+                                                    'ACTION',
+                                                    textAlign: TextAlign.right,
+                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+
+                                          if (snapshot.connectionState == ConnectionState.waiting)
+                                            const Padding(
+                                              padding: EdgeInsets.all(16),
+                                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                            )
+                                          else if (vcrList.isEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(vertical: 16),
+                                              child: Center(
+                                                child: Text(
+                                                  'No previous VCR reports for $vehicleNumber.',
+                                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            ListView.separated(
+                                              shrinkWrap: true,
+                                              physics: const NeverScrollableScrollPhysics(),
+                                              itemCount: vcrList.length,
+                                              separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
+                                              itemBuilder: (context, index) {
+                                                final record = vcrList[index];
+                                                final vNo = record['vehicleNumber']?.toString() ?? vehicleNumber;
+                                                final rawAmt = record['challanAmount'] ?? record['totalFineAmount'] ?? record['fineAmount'] ?? record['amount'] ?? record['totalAmount'] ?? 0;
+                                                final amtVal = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
+
+                                                return Padding(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        flex: 3,
+                                                        child: Text(
+                                                          vNo,
+                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 3,
+                                                        child: Text(
+                                                          '₹${amtVal.toStringAsFixed(2)}',
+                                                          textAlign: TextAlign.center,
+                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Align(
+                                                          alignment: Alignment.centerRight,
+                                                          child: OutlinedButton(
+                                                            onPressed: () {
+                                                              _showNotificationHistoryDetailsDialog(context, vNo, state);
+                                                            },
+                                                            style: OutlinedButton.styleFrom(
+                                                              side: const BorderSide(color: Color(0xFF007BFF)),
+                                                              foregroundColor: const Color(0xFF007BFF),
+                                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                                              minimumSize: const Size(0, 30),
+                                                            ),
+                                                            child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                               ),
+                               const SizedBox(height: 8),
+
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: Card(
+                                    color: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 1,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(14),
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final isMobile = constraints.maxWidth < 600;
+                                          final reportBtn = OutlinedButton.icon(
+                                            onPressed: () => PreviousVcrReportsDialog.show(context, vehicleNumber),
+                                            icon: const Icon(Icons.description, size: 16, color: Colors.black87),
+                                            label: const Text('Previous VCR Reports', style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                            style: OutlinedButton.styleFrom(
+                                              side: BorderSide(color: Colors.grey.shade400),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                            ),
+                                          );
+                                          final collectBtn = OutlinedButton(
+                                            onPressed: () {
+                                              _showDriverDetailsAndSignatureDialog(
+                                                context,
+                                                actionType: 'Collect Fine',
+                                                item: item,
+                                                selectedOffences: selectedOffences.toList(),
+                                                customOffences: customOffences,
+                                                totalChallanAmount: totalChallanAmount,
+                                                remarksText: remarksCtrl.text,
+                                                ref: ref,
+                                              );
+                                            },
+                                            style: OutlinedButton.styleFrom(
+                                              side: const BorderSide(color: Color(0xFF28A745)),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                            ),
+                                            child: const Text('Collect', style: TextStyle(color: Color(0xFF28A745), fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                          );
+                                          final raiseBtn = ElevatedButton(
+                                            onPressed: () async {
+                                              final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+                                              final vehicleNumber = (vehicle['vehicleNumber'] ?? vehicle['registrationNumber'] ?? item['vehicleNumber'] ?? '').toString();
+                                              final offenceNames = [
+                                                ...selectedOffences.map((o) => o['name']?.toString() ?? o['offence']?.toString() ?? ''),
+                                                ...customOffences.map((o) => o['name']?.toString() ?? ''),
+                                              ].where((s) => s.isNotEmpty).join(',');
+
+                                              final repo = VehicleMonitoringRepository(apiClient: ApiClient(SecureStorageService()));
+                                              final dupRes = await repo.checkDuplicateVcr(
+                                                registrationNumber: vehicleNumber,
+                                                offences: offenceNames,
+                                              );
+
+                                              if (dupRes['isDuplicate'] == true) {
+                                                if (context.mounted) {
+                                                  _showPreviousVcrFoundDialog(
+                                                    context,
+                                                    duplicateData: dupRes,
+                                                    vehicleNumber: vehicleNumber,
+                                                    offenceNames: offenceNames,
+                                                    item: item,
+                                                    totalChallanAmount: totalChallanAmount,
+                                                    remarksText: remarksCtrl.text,
+                                                    ref: ref,
+                                                  );
+                                                }
+                                              } else {
+                                                if (context.mounted) {
+                                                  _executeGenerateChallan(
+                                                    context,
+                                                    actionType: 'Raise Challan',
+                                                    item: item,
+                                                    offenceNames: offenceNames,
+                                                    totalChallanAmount: totalChallanAmount,
+                                                    remarksText: remarksCtrl.text,
+                                                    ref: ref,
+                                                  );
+                                                }
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF198754),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                            ),
+                                            child: const Text('Raise Challan', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                          );
+                                          final seizeBtn = ElevatedButton(
+                                            onPressed: () {
+                                              _showDriverDetailsAndSignatureDialog(
+                                                context,
+                                                actionType: 'Seize Vehicle',
+                                                item: item,
+                                                selectedOffences: selectedOffences.toList(),
+                                                customOffences: customOffences,
+                                                totalChallanAmount: totalChallanAmount,
+                                                remarksText: remarksCtrl.text,
+                                                ref: ref,
+                                              );
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFFDC3545),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                            ),
+                                            child: const Text('Seize Vehicle', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                          );
+
+                                          if (isMobile) {
+                                            return Column(
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Expanded(flex: 3, child: reportBtn),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(flex: 2, child: collectBtn),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Row(
+                                                  children: [
+                                                    Expanded(child: raiseBtn),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(child: seizeBtn),
+                                                  ],
+                                                ),
+                                              ],
+                                            );
+                                          }
+
+                                          return Row(
+                                            children: [
+                                              Expanded(flex: 3, child: reportBtn),
+                                              const SizedBox(width: 8),
+                                              Expanded(flex: 2, child: collectBtn),
+                                              const SizedBox(width: 8),
+                                              Expanded(flex: 2, child: raiseBtn),
+                                              const SizedBox(width: 8),
+                                              Expanded(flex: 2, child: seizeBtn),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                             ],
+                           ),
+                         ),
+                       ),
+                     ],
+                   ),
                 ),
               ),
             );
@@ -1571,10 +2010,16 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
       ),
       items: options
           .map(
-            (option) => DropdownMenuItem<String>(
-              value: option,
-              child: Text(option, style: const TextStyle(fontSize: 13)),
-            ),
+            (option) {
+              String displayLabel = option;
+              if (option == 'Select All District') displayLabel = 'Select District';
+              if (option == 'Select All Zone') displayLabel = 'Select Zone';
+              if (option == 'Select All Camera') displayLabel = 'Select Camera';
+              return DropdownMenuItem<String>(
+                value: option,
+                child: Text(displayLabel, style: const TextStyle(fontSize: 13)),
+              );
+            },
           )
           .toList(),
       onChanged: onChanged,
@@ -1635,35 +2080,16 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     final notifier = ref.read(vehicleMonitoringProvider.notifier);
 
     // Extract dynamic vehicle types
-    final List<String> vehicleTypes = ['Select All Vehicle Type', 'Non-transport', 'Transport'];
+    final List<String> vehicleTypes = ['Select All Vehicle Type', 'Non-Transport', 'Transport'];
 
     final List<String> violationTypes = [
       'Select All Violation Type',
-      if (state.offenceTypes.isNotEmpty)
-        ...state.offenceTypes
-      else ...const [
-        'PUC_CERTIFICATE',
-        'REGISTRATION_CERTIFICATE',
-        'INSURANCE_CERTIFICATE',
-        'FITNESS_CERTIFICATE',
-        'PERMITTED_CERTIFICATE',
-        'NO_HELMET_CERTIFICATE',
-        'TRIPLE_RIDING_CERTIFICATE',
-        'ROAD_TAX_CERTIFICATE',
-        'NO_SEATBELT_CERTIFICATE',
-        'MOBILE_USE_CERTIFICATE',
-        'Puc Missing',
-        'Insurance Violation',
-        'Road Tax Violation',
-        'Permit Violation',
-        'Fitness Violation',
-        'Registration Violation',
-        'All Clear'
-      ]
+      ...state.offenceTypes,
     ];
 
     // Filter
-    final filtered = state.violations.where((item) {
+    final sourceItems = state.violations.isNotEmpty ? state.violations : state.notifications;
+    final filtered = sourceItems.where((item) {
       final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
       
       // District Filter
@@ -1754,13 +2180,25 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         matchesViolation = hasTextMatch || hasFlagMatch;
       }
       
-      // Search Box Filter
-      final searchLower = state.searchText.toLowerCase();
-      final matchesSearch = state.searchText.isEmpty ||
-          (vehicle['vehicleNumber']?.toString().toLowerCase().contains(searchLower) ?? false) ||
-          (vehicle['vehicleType']?.toString().toLowerCase().contains(searchLower) ?? false) ||
-          (vehicle['cameraName']?.toString().toLowerCase().contains(searchLower) ?? false) ||
-          (item['remarks']?.toString().toLowerCase().contains(searchLower) ?? false);
+      // Search Box Filter (supports raw text & space-cleaned registration numbers)
+      final searchTextVal = _searchController.text.trim().toLowerCase();
+      final stateSearchVal = state.searchText.trim().toLowerCase();
+      final queryText = searchTextVal.isNotEmpty ? searchTextVal : stateSearchVal;
+      final cleanQuery = queryText.replaceAll(RegExp(r'[\s\-]+'), '');
+
+      bool matchesSearch = queryText.isEmpty;
+      if (!matchesSearch) {
+        final rawPlate = (vehicle['vehicleNumber'] ?? vehicle['vehicleNo'] ?? vehicle['registrationNumber'] ?? item['vehicleNumber'] ?? item['vehicleNo'] ?? item['registrationNumber'] ?? '').toString().toLowerCase();
+        final cleanPlate = rawPlate.replaceAll(RegExp(r'[\s\-]+'), '');
+
+        final plateMatch = rawPlate.contains(queryText) || (cleanQuery.isNotEmpty && cleanPlate.contains(cleanQuery));
+        final cameraMatch = (vehicle['cameraName'] ?? item['cameraName'] ?? '').toString().toLowerCase().contains(queryText);
+        final remarksMatch = (item['remarks'] ?? item['notification'] ?? '').toString().toLowerCase().contains(queryText);
+        final typeMatch = (vehicle['vehicleType'] ?? item['vehicleType'] ?? '').toString().toLowerCase().contains(queryText);
+        final idMatch = (item['id'] ?? item['notificationId'] ?? '').toString().toLowerCase().contains(queryText);
+
+        matchesSearch = plateMatch || cameraMatch || remarksMatch || typeMatch || idMatch;
+      }
           
       return matchesDistrict && matchesZone && matchesCamera && matchesVehicleType && matchesViolation && matchesSearch;
     }).toList();
@@ -1781,8 +2219,8 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           final plateB = vehicleB['vehicleNumber']?.toString() ?? '';
           cmp = plateA.compareTo(plateB);
         } else if (_sortColumn == 'VehicleType') {
-          final typeA = vehicleA['vehicleCategory'] == 'T' ? 'Transport' : 'Non-transport';
-          final typeB = vehicleB['vehicleCategory'] == 'T' ? 'Transport' : 'Non-transport';
+          final typeA = vehicleA['vehicleCategory'] == 'T' ? 'Transport' : 'Non-Transport';
+          final typeB = vehicleB['vehicleCategory'] == 'T' ? 'Transport' : 'Non-Transport';
           cmp = typeA.compareTo(typeB);
         } else if (_sortColumn == 'Camera') {
           final camA = vehicleA['cameraName']?.toString() ?? '';
@@ -2166,7 +2604,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                       final item = paginated[index];
                                       final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
                                       final isCompliant = vehicle['allClear'] == true;
-                                      final vehicleTypeLabel = vehicle['vehicleCategory'] == 'T' ? 'Transport' : 'Non-transport';
+                                      final vehicleTypeLabel = vehicle['vehicleCategory'] == 'T' ? 'Transport' : 'Non-Transport';
 
                                       return Container(
                                         color: index % 2 == 0 ? Colors.white : const Color(0xFFF7FAFA),
@@ -2391,6 +2829,57 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
             (vehicle['cameraName']?.toString().toLowerCase().contains(_localCamera.toLowerCase()) ?? false);
       }
 
+      // Vehicle Type Filter
+      bool matchesVehicleType = _localVehicleType == 'Select All Vehicle Type' || _localVehicleType.isEmpty;
+      if (!matchesVehicleType) {
+        final cat = (vehicle['vehicleCategory'] ?? '').toString();
+        final vt = (vehicle['vehicleType'] ?? '').toString();
+        if (_localVehicleType == 'Transport') {
+          matchesVehicleType = cat == 'T' || vt.toLowerCase().contains('transport') || _deriveVehicleType(vehicle).contains('TRANSPORT');
+        } else if (_localVehicleType == 'Non-Transport' || _localVehicleType == 'Non-transport') {
+          matchesVehicleType = cat == 'NT' || vt.toLowerCase().contains('non') || _deriveVehicleType(vehicle).contains('NON-TRANSPORT');
+        } else {
+          matchesVehicleType = vt.toLowerCase() == _localVehicleType.toLowerCase();
+        }
+      }
+
+      // Violation Type Filter
+      bool matchesViolationType = _localViolationType == 'Select All Violation Type' || _localViolationType.isEmpty;
+      if (!matchesViolationType) {
+        final sel = _localViolationType;
+        final selLower = sel.toLowerCase();
+
+        final String remarksLower = (item['remarks']?.toString() ?? '').toLowerCase();
+        final String notificationLower = (item['notification']?.toString() ?? '').toLowerCase();
+        final String offenceLower = (item['offence']?.toString() ?? vehicle['offence']?.toString() ?? '').toLowerCase();
+        final cleanSel = selLower.replaceAll('_', ' ').replaceAll('certificate', '').trim();
+
+        bool hasTextMatch = remarksLower.contains(cleanSel) ||
+            notificationLower.contains(cleanSel) ||
+            offenceLower.contains(cleanSel) ||
+            offenceLower.contains(selLower) ||
+            remarksLower.contains(selLower);
+
+        bool hasFlagMatch = false;
+        if (sel == 'Puc Missing' || selLower.contains('puc')) {
+          hasFlagMatch = vehicle['pucCertificate'] == false;
+        } else if (sel == 'Insurance Violation' || selLower.contains('insurance')) {
+          hasFlagMatch = vehicle['insurance'] == false;
+        } else if (sel == 'Road Tax Violation' || selLower.contains('road_tax') || selLower.contains('roadtax')) {
+          hasFlagMatch = vehicle['roadTax'] == false;
+        } else if (sel == 'Permit Violation' || selLower.contains('permit')) {
+          hasFlagMatch = vehicle['permit'] == false;
+        } else if (sel == 'Fitness Violation' || selLower.contains('fitness')) {
+          hasFlagMatch = vehicle['fitnessCertificate'] == false;
+        } else if (sel == 'Registration Violation' || selLower.contains('registration')) {
+          hasFlagMatch = vehicle['registration'] == false;
+        } else if (sel == 'All Clear') {
+          hasFlagMatch = vehicle['allClear'] == true;
+        }
+
+        matchesViolationType = hasTextMatch || hasFlagMatch;
+      }
+
       // Search Box Filter
       bool matchesSearch = searchLower.isEmpty;
       if (!matchesSearch) {
@@ -2400,7 +2889,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         matchesSearch = plateMatch || cameraMatch || remarksMatch;
       }
 
-      return matchesDistrict && matchesZone && matchesCamera && matchesSearch;
+      return matchesDistrict && matchesZone && matchesCamera && matchesVehicleType && matchesViolationType && matchesSearch;
     }).toList();
 
     // Sort
@@ -2574,6 +3063,25 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         onChanged: (value) => setState(() => _localTimeRange = value ?? 'Select All Time Range'),
                       );
 
+                      final vehicleTypes = ['Select All Vehicle Type', 'Non-Transport', 'Transport'];
+                      final vehicleTypeDropdown = _buildDropdownField(
+                        hint: 'Select Vehicle Type',
+                        value: _localVehicleType,
+                        options: vehicleTypes,
+                        onChanged: (value) => setState(() => _localVehicleType = value ?? 'Select All Vehicle Type'),
+                      );
+
+                      final violationTypes = [
+                        'Select All Violation Type',
+                        ...state.offenceTypes,
+                      ];
+                      final violationTypeDropdown = _buildDropdownField(
+                        hint: 'Select Violation Type',
+                        value: _localViolationType,
+                        options: violationTypes,
+                        onChanged: (value) => setState(() => _localViolationType = value ?? 'Select All Violation Type'),
+                      );
+
                       final applyButton = FilledButton.icon(
                         onPressed: () {
                           setState(() {
@@ -2583,6 +3091,8 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                             districtName: _localDistrict,
                             zoneName: _localZone,
                             cameraId: _localCamera,
+                            vehicleType: _localVehicleType,
+                            violationType: _localViolationType,
                           );
                         },
                         icon: const Icon(Icons.check, size: 16, color: Colors.white),
@@ -2616,6 +3126,14 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           Row(
                             children: [
                               Expanded(child: cameraDropdown),
+                              const SizedBox(width: 12),
+                              Expanded(child: vehicleTypeDropdown),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(child: violationTypeDropdown),
                               const SizedBox(width: 12),
                               Expanded(child: timeRangeDropdown),
                             ],
@@ -2686,7 +3204,10 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                   icon: const Icon(Icons.close, size: 16),
                                   onPressed: () {
                                     _searchController.clear();
-                                    setState(() {});
+                                    notifier.updateSearch('');
+                                    setState(() {
+                                      _currentPage = 1;
+                                    });
                                   },
                                 )
                               : null,
@@ -2694,7 +3215,12 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(vertical: 8),
                         ),
-                        onChanged: (_) => setState(() {}),
+                        onChanged: (val) {
+                          notifier.updateSearch(val);
+                          setState(() {
+                            _currentPage = 1;
+                          });
+                        },
                       ),
                     ),
                   ],
@@ -3183,9 +3709,43 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Driver Details & Signature Dialog
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+Future<String?> _getSignatureBase64(List<Offset?> points) async {
+  if (points.isEmpty) return null;
+  try {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 400, 200));
+
+    final bgPaint = Paint()..color = const Color(0xFFFFFFFF);
+    canvas.drawRect(const Rect.fromLTWH(0, 0, 400, 200), bgPaint);
+
+    final paint = Paint()
+      ..color = const Color(0xFF000000)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 3.0;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      if (points[i] != null && points[i + 1] != null) {
+        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+      } else if (points[i] != null && points[i + 1] == null) {
+        canvas.drawPoints(ui.PointMode.points, [points[i]!], paint);
+      }
+    }
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(400, 200);
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) return null;
+
+    final bytes = byteData.buffer.asUint8List();
+    final base64Str = base64Encode(bytes);
+    return 'data:image/png;base64,$base64Str';
+  } catch (e) {
+    debugPrint('Error converting signature to base64: $e');
+    return null;
+  }
+}
 
 class _SignaturePainter extends CustomPainter {
   _SignaturePainter(this.points);
@@ -3216,24 +3776,17 @@ void _showSignatureCaptureDialog(
   showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setSig) => AlertDialog(
-        title: const Text('Capture Signature', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: 400,
-          height: 220,
-          child: Column(
-            children: [
-              const Text('Draw signature below:', style: TextStyle(fontSize: 12, color: Colors.black54)),
-              const SizedBox(height: 8),
-              Expanded(
-                child: GestureDetector(
-                  onPanUpdate: (details) {
-                    setSig(() {
-                      final RenderBox box = ctx.findRenderObject() as RenderBox;
-                      points.add(box.globalToLocal(details.globalPosition));
-                    });
-                  },
-                  onPanEnd: (_) => setSig(() => points.add(null)),
+      builder: (ctx, setSig) {
+        return AlertDialog(
+          title: const Text('Capture Signature', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 400,
+            height: 220,
+            child: Column(
+              children: [
+                const Text('Draw signature below:', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                const SizedBox(height: 8),
+                Expanded(
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade400),
@@ -3242,38 +3795,509 @@ void _showSignatureCaptureDialog(
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: CustomPaint(
-                        painter: _SignaturePainter(List<Offset?>.from(points)),
-                        child: Container(),
+                      child: Listener(
+                        onPointerDown: (event) {
+                          setSig(() {
+                            points.add(event.localPosition);
+                          });
+                        },
+                        onPointerMove: (event) {
+                          setSig(() {
+                            points.add(event.localPosition);
+                          });
+                        },
+                        onPointerUp: (event) {
+                          setSig(() {
+                            points.add(null);
+                          });
+                        },
+                        child: CustomPaint(
+                          painter: _SignaturePainter(List<Offset?>.from(points)),
+                          child: const SizedBox.expand(),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => setSig(() => points.clear()),
+              child: const Text('Clear', style: TextStyle(color: Colors.orange)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                onSigned(List<Offset?>.from(points));
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
+              child: const Text('Confirm', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+Widget _buildDupRow(String label, Widget child) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF64748B),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => setSig(() => points.clear()),
-            child: const Text('Clear', style: TextStyle(color: Colors.orange)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              onSigned(List<Offset?>.from(points));
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
-            child: const Text('Confirm', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+      ),
+      const SizedBox(width: 12),
+      Flexible(
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: child,
+        ),
+      ),
+    ],
+  );
+}
+
+void _showPreviousVcrFoundDialog(
+  BuildContext context, {
+  required Map<String, dynamic> duplicateData,
+  required String vehicleNumber,
+  required String offenceNames,
+  required Map<String, dynamic> item,
+  required double totalChallanAmount,
+  required String remarksText,
+  required WidgetRef ref,
+}) {
+  final vehicleNoStr = (duplicateData['vehicleNo'] ?? duplicateData['registrationNumber'] ?? vehicleNumber).toString();
+  final offenceStr = (duplicateData['offence'] ?? duplicateData['offences'] ?? offenceNames).toString();
+  final previousVcrStr = (duplicateData['previousVcr'] ?? duplicateData['vcrNumber'] ?? duplicateData['vcrNo'] ?? '').toString();
+  final genDateStr = (duplicateData['generatedDate'] ?? duplicateData['issuedDate'] ?? '').toString();
+  final allowedAfterStr = (duplicateData['allowedAfter'] ?? '').toString();
+  final statusStr = (duplicateData['status'] ?? 'DUPLICATE PERIOD ACTIVE').toString();
+
+  final hasValidVcr = previousVcrStr.isNotEmpty &&
+      previousVcrStr.toLowerCase() != 'none' &&
+      previousVcrStr.toLowerCase() != 'null';
+
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        width: 580,
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.95,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        color: const Color(0xFFF8FAFC),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header Banner
+            Container(
+              color: const Color(0xFF0F265C),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Previous VCR Found',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => Navigator.of(ctx).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.white24,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Scrollable Content Area
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    const Text(
+                      'For this offence, a VCR is generated and it is in the duplicate days period.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Card details box
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // VEHICLE NO
+                          _buildDupRow(
+                            'VEHICLE NO:',
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                vehicleNoStr,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+
+                          // OFFENCE
+                          _buildDupRow(
+                            'OFFENCE:',
+                            Text(
+                              offenceStr,
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+
+                          // PREVIOUS VCR
+                          _buildDupRow(
+                            'PREVIOUS VCR:',
+                            Wrap(
+                              alignment: WrapAlignment.end,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  previousVcrStr,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: hasValidVcr ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                                if (hasValidVcr)
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final repo = VehicleMonitoringRepository(apiClient: ApiClient(SecureStorageService()));
+                                      try {
+                                        final pdfData = await repo.generatePdf(previousVcrStr);
+                                        await PdfHelper.displayOrDownloadPdf(pdfData, '$previousVcrStr.pdf');
+                                      } catch (e) {
+                                        debugPrint('Error generating PDF: $e');
+                                      }
+                                    },
+                                    icon: const Icon(Icons.picture_as_pdf, size: 14, color: Color(0xFF2563EB)),
+                                    label: const Text(
+                                      'View VCR',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: Color(0xFF2563EB)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+
+                          // GENERATED DATE
+                          _buildDupRow(
+                            'GENERATED DATE:',
+                            Text(
+                              genDateStr,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+
+                          // STATUS
+                          _buildDupRow(
+                            'STATUS:',
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE0E7FF),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.error, size: 14, color: Color(0xFF3730A3)),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      statusStr.toUpperCase(),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                        color: Color(0xFF3730A3),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+
+                          // ALLOWED AFTER
+                          _buildDupRow(
+                            'ALLOWED AFTER:',
+                            Text(
+                              allowedAfterStr,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF16A34A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Footer Buttons
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: Colors.white,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF94A3B8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text(
+                        'CANCEL',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _executeGenerateChallan(
+                          context,
+                          actionType: 'Raise Challan',
+                          item: item,
+                          offenceNames: offenceNames,
+                          totalChallanAmount: totalChallanAmount,
+                          remarksText: remarksText,
+                          ref: ref,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F265C),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text(
+                        'GENERATE ANYWAY',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
+}
+
+Future<void> _executeGenerateChallan(
+  BuildContext context, {
+  required String actionType,
+  required Map<String, dynamic> item,
+  required String offenceNames,
+  required double totalChallanAmount,
+  required String remarksText,
+  required WidgetRef ref,
+}) async {
+  final repo = VehicleMonitoringRepository(apiClient: ApiClient(SecureStorageService()));
+  final storage = SecureStorageService();
+  final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+  final vehicleNumber = (vehicle['vehicleNumber'] ?? vehicle['registrationNumber'] ?? item['vehicleNumber'] ?? '').toString();
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => const Center(
+      child: CircularProgressIndicator(),
+    ),
+  );
+
+  try {
+    final currentUser = await storage.readUsername() ?? 'tc_user';
+    final vehicleClass = (vehicle['vehicleClass'] ?? vehicle['category'] ?? vehicle['vehicleType'] ?? 'Heavy Vehicle').toString();
+    final locationName = (vehicle['place'] ?? vehicle['location'] ?? vehicle['districtName'] ?? 'Kamareddy').toString();
+
+    final rawVid = vehicle['id'] ?? vehicle['vehicleId'] ?? item['vehicleId'] ?? item['id'] ?? 0;
+    final int vehicleId = rawVid is num ? rawVid.toInt() : (int.tryParse(rawVid.toString()) ?? 0);
+
+    final now = DateTime.now();
+    final monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final monthYear = '${monthNames[now.month - 1]}${now.year}';
+    final randomId = (now.millisecondsSinceEpoch % 1000).toString().padLeft(3, '0');
+    final clientVcrNumber = 'TG_017/$monthYear/vcr_$randomId';
+    final formattedDate = now.toIso8601String().split('.').first;
+
+    // 1. Save VCR API
+    final vcrData = {
+      'vcrNumber': clientVcrNumber,
+      'registrationNumber': vehicleNumber,
+      'vehicleClass': vehicleClass,
+      'vehicleId': vehicleId,
+      'ownerName': (vehicle['ownerName'] ?? '').toString(),
+      'driverName': ' ',
+      'licenceNumber': ' ',
+      'offences': offenceNames,
+      'fineAmount': totalChallanAmount,
+      'existingChallanAmount': totalChallanAmount,
+      'checkingOfficer': currentUser,
+      'issuedByUsername': currentUser,
+      'issuedBy': 'RTA',
+      'location': locationName,
+      'issuedDate': formattedDate,
+      'remarks': remarksText,
+    };
+    final vcrResult = await repo.saveVcr(vcrData);
+    final vcrNumber = (vcrResult['vcrNumber'] ?? vcrResult['id'] ?? clientVcrNumber).toString();
+
+    // 2. Add Challan API
+    if (vcrNumber.isNotEmpty) {
+      final String challanTypeVal = actionType == 'Seize Vehicle'
+          ? 'SEIZE'
+          : (actionType == 'Raise Challan' ? 'RAISE' : 'COLLECT');
+
+      await repo.addChallan({
+        'vcrNumber': vcrNumber,
+        'challanNumber': vcrNumber,
+        'challanAmount': totalChallanAmount,
+        'fineAmount': totalChallanAmount,
+        'challanType': challanTypeVal,
+        'registrationNumber': vehicleNumber,
+        'vehicleId': vehicleId,
+        'status': 'ISSUED',
+        'offenceType': 'GENERAL',
+        'issuedDate': formattedDate,
+        'remarks': remarksText,
+      });
+    }
+
+    // 3. Generate PDF API
+    if (vcrNumber.isNotEmpty) {
+      try {
+        final pdfData = await repo.generatePdf(vcrNumber);
+        await PdfHelper.displayOrDownloadPdf(pdfData, '$vcrNumber.pdf');
+      } catch (e) {
+        debugPrint('Warning: generatePdf failed: $e');
+      }
+    }
+
+    if (context.mounted) Navigator.of(context).pop(); // dismiss loading
+    if (context.mounted) Navigator.of(context).pop(); // dismiss details modal if open
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Challan generated successfully!'
+            '${vcrNumber.isNotEmpty ? ' VCR #$vcrNumber' : ''}',
+          ),
+          backgroundColor: const Color(0xFF198754),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) Navigator.of(context).pop(); // dismiss loading
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate challan: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 }
 
 void _showDriverDetailsAndSignatureDialog(
@@ -3292,13 +4316,7 @@ void _showDriverDetailsAndSignatureDialog(
   // Form controllers
   final licenseCtrl = TextEditingController();
   final driverNameCtrl = TextEditingController();
-  final driverAgeCtrl = TextEditingController();
-  final officerNameCtrl = TextEditingController();
-  final officerBadgeCtrl = TextEditingController();
-  final placeCtrl = TextEditingController();
   final formKey = GlobalKey<FormState>();
-
-  List<Offset?> officerSignaturePoints = [];
   List<Offset?> driverSignaturePoints = [];
   bool isSubmitting = false;
   String? submitError;
@@ -3346,7 +4364,7 @@ void _showDriverDetailsAndSignatureDialog(
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Driver Details & Signature',
+                          actionType == 'Seize Vehicle' ? 'Driver Details' : 'Driver Details & Signature',
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -3382,38 +4400,6 @@ void _showDriverDetailsAndSignatureDialog(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Vehicle info row
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF0F4FF),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFBBCCF0)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.directions_car, color: Color(0xFF0F3260), size: 20),
-                                const SizedBox(width: 10),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Vehicle Number', style: TextStyle(fontSize: 11, color: Colors.black54)),
-                                    Text(vehicleNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F3260))),
-                                  ],
-                                ),
-                                const Spacer(),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    const Text('Total Amount', style: TextStyle(fontSize: 11, color: Colors.black54)),
-                                    Text('₹ ${totalChallanAmount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: actionColor)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
                           // Driver Details Section
                           _buildSectionHeader('Driver Details', Icons.person_outline, const Color(0xFF0F3260)),
                           const SizedBox(height: 12),
@@ -3432,121 +4418,37 @@ void _showDriverDetailsAndSignatureDialog(
                                 decoration: _inputDecoration('Driver Name', Icons.person_outline),
                                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter driver name' : null,
                               );
-                              final ageField = TextFormField(
-                                controller: driverAgeCtrl,
-                                keyboardType: TextInputType.number,
-                                decoration: _inputDecoration('Driver Age', Icons.cake_outlined),
-                              );
+
                               if (isMobile) {
                                 return Column(children: [
                                   licenseField,
                                   const SizedBox(height: 12),
                                   nameField,
-                                  const SizedBox(height: 12),
-                                  ageField,
                                 ]);
                               }
-                              return Column(children: [
-                                licenseField,
-                                const SizedBox(height: 12),
-                                Row(children: [
-                                  Expanded(child: nameField),
-                                  const SizedBox(width: 12),
-                                  SizedBox(width: 130, child: ageField),
-                                ]),
+                              return Row(children: [
+                                Expanded(child: licenseField),
+                                const SizedBox(width: 12),
+                                Expanded(child: nameField),
                               ]);
                             },
                           ),
-                          const SizedBox(height: 20),
 
-                          // Officer Details Section
-                          _buildSectionHeader('Officer Details', Icons.local_police_outlined, const Color(0xFF0F3260)),
-                          const SizedBox(height: 12),
-                          LayoutBuilder(
-                            builder: (_, constraints) {
-                              final isMobile = constraints.maxWidth < 480;
-                              final officerNameField = TextFormField(
-                                controller: officerNameCtrl,
-                                decoration: _inputDecoration('Officer Name', Icons.badge_outlined),
-                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter officer name' : null,
-                              );
-                              final badgeField = TextFormField(
-                                controller: officerBadgeCtrl,
-                                textCapitalization: TextCapitalization.characters,
-                                inputFormatters: [UpperCaseTextFormatter()],
-                                decoration: _inputDecoration('Badge No.', Icons.numbers_outlined),
-                              );
-                              final placeField = TextFormField(
-                                controller: placeCtrl,
-                                textCapitalization: TextCapitalization.characters,
-                                inputFormatters: [UpperCaseTextFormatter()],
-                                decoration: _inputDecoration('Place / Location', Icons.location_on_outlined),
-                              );
-                              if (isMobile) {
-                                return Column(children: [
-                                  officerNameField,
-                                  const SizedBox(height: 12),
-                                  badgeField,
-                                  const SizedBox(height: 12),
-                                  placeField,
-                                ]);
-                              }
-                              return Column(children: [
-                                Row(children: [
-                                  Expanded(child: officerNameField),
-                                  const SizedBox(width: 12),
-                                  SizedBox(width: 140, child: badgeField),
-                                ]),
-                                const SizedBox(height: 12),
-                                placeField,
-                              ]);
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Signatures Section
-                          _buildSectionHeader('Signatures', Icons.draw_outlined, const Color(0xFF0F3260)),
-                          const SizedBox(height: 12),
-                          LayoutBuilder(
-                            builder: (_, constraints) {
-                              final isMobile = constraints.maxWidth < 480;
-
-                              Widget officerSigBox = _buildSignatureBox(
-                                label: 'Officer Signature',
-                                points: officerSignaturePoints,
-                                onCapture: () => _showSignatureCaptureDialog(
-                                  ctx,
-                                  onSigned: (pts) => setDlgState(() => officerSignaturePoints = pts),
-                                ),
-                                onClear: () => setDlgState(() => officerSignaturePoints = []),
-                              );
-                              Widget driverSigBox = _buildSignatureBox(
-                                label: 'Driver / Owner Signature',
-                                points: driverSignaturePoints,
-                                onCapture: () => _showSignatureCaptureDialog(
-                                  ctx,
-                                  onSigned: (pts) => setDlgState(() => driverSignaturePoints = pts),
-                                ),
-                                onClear: () => setDlgState(() => driverSignaturePoints = []),
-                              );
-
-                              if (isMobile) {
-                                return Column(children: [
-                                  officerSigBox,
-                                  const SizedBox(height: 12),
-                                  driverSigBox,
-                                ]);
-                              }
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: officerSigBox),
-                                  const SizedBox(width: 16),
-                                  Expanded(child: driverSigBox),
-                                ],
-                              );
-                            },
-                          ),
+                          if (actionType != 'Seize Vehicle') ...[
+                            const SizedBox(height: 20),
+                            // Signatures Section
+                            _buildSectionHeader('Signatures', Icons.draw_outlined, const Color(0xFF0F3260)),
+                            const SizedBox(height: 12),
+                            _buildSignatureBox(
+                              label: 'Driver / Owner Signature',
+                              points: driverSignaturePoints,
+                              onCapture: () => _showSignatureCaptureDialog(
+                                ctx,
+                                onSigned: (pts) => setDlgState(() => driverSignaturePoints = pts),
+                              ),
+                              onClear: () => setDlgState(() => driverSignaturePoints = []),
+                            ),
+                          ],
 
                           if (submitError != null) ...[
                             const SizedBox(height: 12),
@@ -3587,91 +4489,146 @@ void _showDriverDetailsAndSignatureDialog(
                         icon: isSubmitting
                             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.send, size: 16),
-                        label: Text(isSubmitting ? 'Submitting...' : 'Generate Manual Challan'),
+                        label: Text(isSubmitting ? 'Submitting...' : actionType),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: actionColor,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
-                        onPressed: isSubmitting
-                            ? null
-                            : () async {
-                                if (!formKey.currentState!.validate()) return;
-                                setDlgState(() {
-                                  isSubmitting = true;
-                                  submitError = null;
-                                });
-                                try {
-                                  final storage = SecureStorageService();
-                                  final apiClient = ApiClient(storage);
-                                  final repo = VehicleMonitoringRepository(apiClient: apiClient);
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () async {
+                                        if (!formKey.currentState!.validate()) return;
+                                        setDlgState(() {
+                                          isSubmitting = true;
+                                          submitError = null;
+                                        });
+                                        try {
+                                          final storage = SecureStorageService();
+                                          final apiClient = ApiClient(storage);
+                                          final repo = VehicleMonitoringRepository(apiClient: apiClient);
 
-                                  // Compose offences list
-                                  final offenceNames = [
-                                    ...selectedOffences.map((o) => o['name']?.toString() ?? o['offence']?.toString() ?? ''),
-                                    ...customOffences.map((o) => o['name']?.toString() ?? ''),
-                                  ].where((s) => s.isNotEmpty).join(',');
+                                          // Compose offences string
+                                          final offenceNames = [
+                                            ...selectedOffences.map((o) => o['name']?.toString() ?? o['offence']?.toString() ?? ''),
+                                            ...customOffences.map((o) => o['name']?.toString() ?? ''),
+                                          ].where((s) => s.isNotEmpty).join(',');
 
-                                  // 1. Save VCR
-                                  final vcrData = {
-                                    'registrationNumber': vehicleNumber,
-                                    'offences': offenceNames,
-                                    'challanAmount': totalChallanAmount,
-                                    'driverLicenseNumber': licenseCtrl.text.trim(),
-                                    'driverName': driverNameCtrl.text.trim(),
-                                    'driverAge': driverAgeCtrl.text.trim(),
-                                    'officerName': officerNameCtrl.text.trim(),
-                                    'officerBadgeNumber': officerBadgeCtrl.text.trim(),
-                                    'place': placeCtrl.text.trim(),
-                                    'challanType': actionType == 'Seize Vehicle' ? 'SEIZE' : (actionType == 'Raise Challan' ? 'RAISE' : 'COLLECT'),
-                                    'remarks': remarksText,
-                                  };
-                                  final vcrResult = await repo.saveVcr(vcrData);
-                                  final vcrNumber = vcrResult['vcrNumber']?.toString() ?? vcrResult['id']?.toString() ?? '';
+                                          // 1. Check duplicate VCR API (non-blocking warning if fails)
+                                          try {
+                                            await repo.checkDuplicateVcr(
+                                              registrationNumber: vehicleNumber,
+                                              offences: offenceNames,
+                                            );
+                                          } catch (e) {
+                                            debugPrint('Warning: checkDuplicateVcr check: $e');
+                                          }
 
-                                  // 2. Add challan
-                                  if (vcrNumber.isNotEmpty) {
-                                    await repo.addChallan({
-                                      'vcrNumber': vcrNumber,
-                                      'challanAmount': totalChallanAmount,
-                                      'challanType': vcrData['challanType'],
-                                      'registrationNumber': vehicleNumber,
-                                    });
-                                  }
+                                          // Extract user details & vehicle metadata
+                                          final currentUser = await storage.readUsername() ?? 'tc_user';
+                                          final vehicleClass = (vehicle['vehicleClass'] ?? vehicle['category'] ?? vehicle['vehicleType'] ?? 'Heavy Vehicle').toString();
+                                          final locationName = (vehicle['place'] ?? vehicle['location'] ?? vehicle['districtName'] ?? 'Kamareddy').toString();
+                                          
+                                          final rawVid = vehicle['id'] ?? vehicle['vehicleId'] ?? item['vehicleId'] ?? item['id'] ?? 0;
+                                          final int vehicleId = rawVid is num ? rawVid.toInt() : (int.tryParse(rawVid.toString()) ?? 0);
 
-                                  // 3. Save driver signature (fire & forget)
-                                  if (driverSignaturePoints.isNotEmpty && vcrNumber.isNotEmpty) {
-                                    final sigStr = driverSignaturePoints
-                                        .where((p) => p != null)
-                                        .map((p) => '${p!.dx.toStringAsFixed(1)},${p.dy.toStringAsFixed(1)}')
-                                        .join(';');
-                                    repo.saveDriverSign(vcrNumber: vcrNumber, driverSign: sigStr).ignore();
-                                  }
+                                          final now = DateTime.now();
+                                          final monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                          final monthYear = '${monthNames[now.month - 1]}${now.year}';
+                                          final randomId = (now.millisecondsSinceEpoch % 1000).toString().padLeft(3, '0');
+                                          final clientVcrNumber = 'TG_017/$monthYear/vcr_$randomId';
+                                          final formattedDate = now.toIso8601String().split('.').first;
 
-                                  if (ctx.mounted) Navigator.of(ctx).pop();
-                                  if (context.mounted) Navigator.of(context).pop();
+                                          // 2. Save VCR API
+                                          final vcrData = {
+                                            'vcrNumber': clientVcrNumber,
+                                            'registrationNumber': vehicleNumber,
+                                            'vehicleClass': vehicleClass,
+                                            'vehicleId': vehicleId,
+                                            'ownerName': (vehicle['ownerName'] ?? '').toString(),
+                                            'driverName': driverNameCtrl.text.trim(),
+                                            'licenceNumber': licenseCtrl.text.trim(),
+                                            'offences': offenceNames,
+                                            'fineAmount': totalChallanAmount,
+                                            'existingChallanAmount': totalChallanAmount,
+                                            'checkingOfficer': currentUser,
+                                            'issuedByUsername': currentUser,
+                                            'issuedBy': 'RTA',
+                                            'location': locationName,
+                                            'issuedDate': formattedDate,
+                                            'remarks': remarksText,
+                                          };
+                                          final vcrResult = await repo.saveVcr(vcrData);
+                                          final vcrNumber = (vcrResult['vcrNumber'] ?? vcrResult['id'] ?? clientVcrNumber).toString();
 
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '${actionType == 'Seize Vehicle' ? 'Vehicle seized' : 'Challan generated'} successfully!'
-                                          '${vcrNumber.isNotEmpty ? ' VCR #$vcrNumber' : ''}',
-                                        ),
-                                        backgroundColor: actionColor,
-                                        behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(seconds: 4),
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  setDlgState(() {
-                                    isSubmitting = false;
-                                    submitError = 'Failed to submit: ${e.toString()}';
-                                  });
-                                }
-                              },
+                                          // 3. Add Challan API
+                                          if (vcrNumber.isNotEmpty) {
+                                            final String challanTypeVal = actionType == 'Seize Vehicle'
+                                                ? 'SEIZE'
+                                                : (actionType == 'Raise Challan' ? 'RAISE' : 'COLLECT');
+
+                                            await repo.addChallan({
+                                              'vcrNumber': vcrNumber,
+                                              'challanNumber': vcrNumber,
+                                              'challanAmount': totalChallanAmount,
+                                              'fineAmount': totalChallanAmount,
+                                              'challanType': challanTypeVal,
+                                              'registrationNumber': vehicleNumber,
+                                              'vehicleId': vehicleId,
+                                              'status': 'ISSUED',
+                                              'offenceType': 'GENERAL',
+                                              'issuedDate': formattedDate,
+                                              'remarks': remarksText,
+                                            });
+                                          }
+
+                                          // 4. Save Driver Signature API
+                                          if (actionType != 'Seize Vehicle' && driverSignaturePoints.isNotEmpty && vcrNumber.isNotEmpty) {
+                                            try {
+                                              final sigBase64 = await _getSignatureBase64(driverSignaturePoints);
+                                              if (sigBase64 != null && sigBase64.isNotEmpty) {
+                                                final cleanSig = sigBase64.contains(',') ? sigBase64.split(',').last : sigBase64;
+                                                await repo.saveDriverSign(vcrNumber: vcrNumber, driverSign: cleanSig);
+                                              }
+                                            } catch (e) {
+                                              debugPrint('Warning: saveDriverSign failed: $e');
+                                            }
+                                          }
+
+                                          // 5. Generate PDF API
+                                          if (vcrNumber.isNotEmpty) {
+                                            try {
+                                              final pdfData = await repo.generatePdf(vcrNumber);
+                                              await PdfHelper.displayOrDownloadPdf(pdfData, '$vcrNumber.pdf');
+                                            } catch (e) {
+                                              debugPrint('Warning: generatePdf failed: $e');
+                                            }
+                                          }
+
+                                          if (ctx.mounted) Navigator.of(ctx).pop();
+                                          if (context.mounted) Navigator.of(context).pop();
+
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  '${actionType == 'Seize Vehicle' ? 'Vehicle seized' : 'Challan generated'} successfully!'
+                                                  '${vcrNumber.isNotEmpty ? ' VCR #$vcrNumber' : ''}',
+                                                ),
+                                                backgroundColor: actionColor,
+                                                behavior: SnackBarBehavior.floating,
+                                                duration: const Duration(seconds: 4),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          setDlgState(() {
+                                            isSubmitting = false;
+                                            submitError = 'Failed to submit: ${e.toString()}';
+                                          });
+                                        }
+                                      },
                       ),
                     ],
                   ),
@@ -3796,3 +4753,5 @@ Widget _buildSignatureBox({
     ),
   );
 }
+
+

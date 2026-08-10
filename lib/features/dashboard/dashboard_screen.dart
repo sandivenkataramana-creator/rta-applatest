@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:intl/intl.dart';
-import 'package:go_router/go_router.dart';
 
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -64,8 +63,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     
-    // Auto Refresh every 15 seconds
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    // Auto Refresh every 20 seconds
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
       _refreshDashboardData();
     });
   }
@@ -948,11 +947,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return options.map<Widget>((String item) {
           String label = item;
           if (item == 'Select All District') {
-            label = 'All Districts';
+            label = 'Select District';
           } else if (item == 'Select All Zone') {
-            label = 'All Zones';
+            label = 'Select Zone';
           } else if (item == 'Select All Camera') {
-            label = 'All Cameras';
+            label = 'Select Camera';
           }
           return Text(
             label,
@@ -966,11 +965,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             (option) {
               String label = option;
               if (option == 'Select All District') {
-                label = 'All Districts';
+                label = 'Select District';
               } else if (option == 'Select All Zone') {
-                label = 'All Zones';
+                label = 'Select Zone';
               } else if (option == 'Select All Camera') {
-                label = 'All Cameras';
+                label = 'Select Camera';
               }
               return DropdownMenuItem<String>(
                 value: option,
@@ -1956,35 +1955,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 38,
-                    child: TextButton(
-                      onPressed: () => context.go('/dashboard/reports'),
-                      style: TextButton.styleFrom(
-                        backgroundColor: const Color(0xFFF3F6F6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'View Full Report',
-                            style: TextStyle(
-                              color: Color(0xFF0F5D55),
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Icon(Icons.arrow_forward, size: 14, color: Color(0xFF0F5D55)),
-                        ],
-                      ),
                     ),
                   ),
                 ],

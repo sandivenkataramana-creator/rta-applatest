@@ -47,27 +47,15 @@ class PageHeaderBanner extends StatelessWidget {
     );
 
     if (action != null) {
-      if (isMobile) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            titleColumn,
-            const SizedBox(height: 12),
-            action!,
-          ],
-        );
-      } else {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(child: titleColumn),
-            const SizedBox(width: 16),
-            action!,
-          ],
-        );
-      }
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(child: titleColumn),
+          const SizedBox(width: 12),
+          action!,
+        ],
+      );
     }
 
     return titleColumn;

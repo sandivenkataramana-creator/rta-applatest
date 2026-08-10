@@ -52,6 +52,7 @@ class VehicleExportState {
     this.districts = const [],
     this.zones = const [],
     this.cameras = const [],
+    this.offenceTypes = const [],
     this.selectedDistrictId,
     this.selectedZoneId,
     this.selectedCameraId,
@@ -71,6 +72,7 @@ class VehicleExportState {
   final List<ExportDistrict> districts;
   final List<ExportZone> zones;
   final List<ExportCamera> cameras;
+  final List<String> offenceTypes;
   final int? selectedDistrictId;
   final int? selectedZoneId;
   final int? selectedCameraId;
@@ -90,6 +92,7 @@ class VehicleExportState {
     List<ExportDistrict>? districts,
     List<ExportZone>? zones,
     List<ExportCamera>? cameras,
+    List<String>? offenceTypes,
     Object? selectedDistrictId = _sentinel,
     Object? selectedZoneId = _sentinel,
     Object? selectedCameraId = _sentinel,
@@ -109,6 +112,7 @@ class VehicleExportState {
       districts: districts ?? this.districts,
       zones: zones ?? this.zones,
       cameras: cameras ?? this.cameras,
+      offenceTypes: offenceTypes ?? this.offenceTypes,
       selectedDistrictId: selectedDistrictId == _sentinel
           ? this.selectedDistrictId
           : selectedDistrictId as int?,
@@ -153,7 +157,59 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
           .whereType<Map<String, dynamic>>()
           .map(ExportDistrict.fromJson)
           .toList();
-      state = state.copyWith(isLoadingDistricts: false, districts: districts);
+
+      List<String> offenceTypes = [];
+      try {
+        final offRes = await _api.get<dynamic>('/offence-config/active');
+        final raw = offRes.data;
+        List<dynamic>? list;
+        if (raw is List) {
+          list = raw;
+        } else if (raw is Map) {
+          for (final key in ['data', 'content', 'result', 'offences', 'items', 'list']) {
+            if (raw[key] is List) {
+              list = raw[key] as List;
+              break;
+            }
+          }
+        }
+        if (list != null && list.isNotEmpty) {
+          offenceTypes = list
+              .map((e) => (e is Map ? (e['offence'] ?? e['offenceName'] ?? e['name'] ?? '').toString() : e.toString()))
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      } catch (_) {}
+
+      if (offenceTypes.isEmpty) {
+        try {
+          final offRes = await _api.get<dynamic>('/rta/getOffencesList');
+          final raw = offRes.data;
+          List<dynamic>? list;
+          if (raw is List) {
+            list = raw;
+          } else if (raw is Map) {
+            for (final key in ['data', 'content', 'result', 'offences', 'items', 'list']) {
+              if (raw[key] is List) {
+                list = raw[key] as List;
+                break;
+              }
+            }
+          }
+          if (list != null && list.isNotEmpty) {
+            offenceTypes = list
+                .map((e) => (e is Map ? (e['offence'] ?? e['offenceName'] ?? e['name'] ?? '').toString() : e.toString()))
+                .where((s) => s.isNotEmpty)
+                .toList();
+          }
+        } catch (_) {}
+      }
+
+      state = state.copyWith(
+        isLoadingDistricts: false,
+        districts: districts,
+        offenceTypes: offenceTypes,
+      );
     } catch (e) {
       state = state.copyWith(isLoadingDistricts: false, error: e.toString());
     }
@@ -589,14 +645,7 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
                                 items: const [
                                   'Select All Vehicle Type',
                                   'Non-transport',
-                                  'Transport',
-                                  'MOTOR CAR',
-                                  'MOTOR CYCLE',
-                                  'AUTO RICKSHAW',
-                                  'GOODS CARRIAGE',
-                                  'TRACTOR',
-                                  'BUS',
-                                  'LGV'
+                                  'Transport'
                                 ],
                                 value: state.selectedVehicleType,
                                 onChanged: (val) => notifier.setVehicleType(val ?? 'Select All Vehicle Type'),
@@ -606,21 +655,9 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
                             Expanded(
                               child: _StringDropdownFilter(
                                 icon: Icons.warning_amber_outlined,
-                                items: const [
+                                items: [
                                   'Select All Violation Type',
-                                  'PUC_CERTIFICATE',
-                                  'REGISTRATION_CERTIFICATE',
-                                  'INSURANCE_CERTIFICATE',
-                                  'FITNESS_CERTIFICATE',
-                                  'PERMITTED_CERTIFICATE',
-                                  'ROAD_TAX_CERTIFICATE',
-                                  'Puc Missing',
-                                  'Insurance Violation',
-                                  'Road Tax Violation',
-                                  'Permit Violation',
-                                  'Fitness Violation',
-                                  'Registration Violation',
-                                  'All Clear'
+                                  ...state.offenceTypes,
                                 ],
                                 value: state.selectedViolationType,
                                 onChanged: (val) => notifier.setViolationType(val ?? 'Select All Violation Type'),

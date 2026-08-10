@@ -26,6 +26,10 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 60),
           sendTimeout: const Duration(seconds: 15),
           responseType: ResponseType.json,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
         ),
       ) {
     if (!kIsWeb) {
@@ -84,9 +88,10 @@ class ApiClient {
   Future<Response<T>> get<T>(
     String path, {
     Map<String, dynamic>? queryParameters,
+    Options? options,
   }) async {
     try {
-      return await _dio.get<T>(path, queryParameters: queryParameters);
+      return await _dio.get<T>(path, queryParameters: queryParameters, options: options);
     } on DioException catch (e) {
       throw _mapDioError(e);
     }
@@ -152,10 +157,12 @@ class ApiClient {
       } catch (_) {}
     }
 
-    if (e.response?.data is Map && e.response?.data['message'] != null) {
-      message = e.response!.data['message'].toString();
+    if (errorData is Map && errorData['message'] != null) {
+      message = errorData['message'].toString();
+    } else if (errorData is String && errorData.trim().isNotEmpty) {
+      message = errorData.trim();
     } else if (code == 401 || code == 403) {
-      message = e.response?.data?['message']?.toString() ?? 'Invalid username or password';
+      message = 'Access denied or session expired ($code). Please re-login.';
     } else if (code == 500 || code == 502 || code == 503 || code == 504) {
       message = 'Server is currently unavailable ($code). Please try again later.';
     } else if (rawMsg.contains('XMLHttpRequest') || rawMsg.contains('connection errored')) {

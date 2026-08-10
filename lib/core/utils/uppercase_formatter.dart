@@ -14,7 +14,7 @@ class UpperCaseTextFormatter extends TextInputFormatter {
 }
 
 /// Formatter that enforces Vehicle Registration Number character rules:
-/// Uppercase letters, digits, and space only, up to 13 characters.
+/// Uppercase letters and digits up to 13 characters.
 class VehicleNumberTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -23,28 +23,7 @@ class VehicleNumberTextFormatter extends TextInputFormatter {
   ) {
     final uppercaseText = newValue.text.toUpperCase();
     final clean = uppercaseText.replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    final buffer = StringBuffer();
-    for (int i = 0; i < clean.length; i++) {
-      final char = clean[i];
-      if (i < 2) {
-        if (RegExp(r'[A-Z]').hasMatch(char)) {
-          buffer.write(char);
-        }
-      } else if (i < 4) {
-        if (RegExp(r'[0-9]').hasMatch(char)) {
-          buffer.write(char);
-        }
-      } else if (i < 6) {
-        if (RegExp(r'[A-Z]').hasMatch(char)) {
-          buffer.write(char);
-        }
-      } else if (i < 10) {
-        if (RegExp(r'[0-9]').hasMatch(char)) {
-          buffer.write(char);
-        }
-      }
-    }
-    final formatted = buffer.toString();
+    final formatted = clean.length > 13 ? clean.substring(0, 13) : clean;
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
@@ -53,9 +32,9 @@ class VehicleNumberTextFormatter extends TextInputFormatter {
 }
 
 /// Validates whether a vehicle number matches Indian registration format
-/// (e.g., TG04AB1234).
+/// (e.g., TG04AB1234, TG45H5545, TS09UB9999).
 bool isValidVehicleNumber(String vehicleNumber) {
-  final clean = vehicleNumber.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-  if (clean.length != 10) return false;
-  return RegExp(r'^[A-Z]{2}\d{2}[A-Z]{2}\d{4}$').hasMatch(clean);
+  final clean = vehicleNumber.replaceAll(RegExp(r'[\s\-]+'), '').toUpperCase();
+  if (clean.length < 4 || clean.length > 13) return false;
+  return RegExp(r'^[A-Z0-9]{4,13}$').hasMatch(clean);
 }

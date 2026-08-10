@@ -109,85 +109,81 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     if (!isInitial) {
       state = state.copyWith(isLoading: true);
     }
-    
-    KpiSummary? kpis;
-    List<AnalyticsSeries> analytics = [];
-    List<String> districts = state.districts;
-    List<String> offenceTypes = state.offenceTypes;
-    Map<String, dynamic>? offenceData;
-    Map<String, String> challans = {
-      'eChallan': state.eChallan,
-      'manualChallan': state.manualChallan,
-      'seizedVehicles': state.seizedVehicles,
-    };
-    Map<String, double> monthlyRevenue = state.monthlyRevenue;
-    String? errorMsg;
 
     try {
-      final kpiFuture = repository.fetchKpis(
+      // 1. Immediate Fast Fetch: Districts, Offence Types, & Offence Counts (~200ms)
+      final fastResults = await Future.wait([
+        repository.fetchDistricts().catchError((_) => state.districts),
+        repository.fetchOffenceTypes().catchError((_) => state.offenceTypes),
+        repository.fetchOffenceCountData(
+          district: district,
+          zone: zone,
+          camera: camera,
+          timeRange: timeRange,
+          customStartDate: customStartDate,
+          customEndDate: customEndDate,
+        ).catchError((_) => const <String, dynamic>{}),
+      ]);
+
+      if (!mounted) return;
+
+      final dynamic distsRes = fastResults[0];
+      final dynamic offTypesRes = fastResults[1];
+      final dynamic offDataRes = fastResults[2];
+
+      final districtsList = distsRes is List<String> ? distsRes : state.districts;
+      final offenceTypesList = offTypesRes is List<String> ? offTypesRes : state.offenceTypes;
+      final offenceDataMap = offDataRes is Map<String, dynamic> ? offDataRes : state.offenceData;
+
+      // Update state immediately so UI opens instantly on mobile!
+      state = state.copyWith(
+        districts: districtsList,
+        offenceTypes: offenceTypesList,
+        offenceData: offenceDataMap,
+        isLoading: false,
+      );
+
+      // 2. Stream secondary metrics in background (KPIs, Traffic, Challan Counts, Revenue)
+      repository.fetchKpis(
         district: district,
         zone: zone,
         camera: camera,
         timeRange: timeRange,
-      ).catchError((e) {
-        errorMsg ??= e.toString();
-        return const KpiSummary(
-          totalVehiclesToday: 0,
-          totalVehiclesWeek: 0,
-          totalVehiclesMonth: 0,
-          blacklistedVehicles: 0,
-          violationsDetected: 0,
-          activeCameras: 0,
-          offlineCameras: 0,
-          totalCheckposts: 0,
-        );
-      });
+      ).then((kpis) {
+        if (mounted) {
+          state = state.copyWith(kpis: kpis);
+        }
+      }).catchError((_) {});
 
-      final trafficFuture = repository.fetchHourlyTraffic(
+      repository.fetchHourlyTraffic(
         district: district,
         zone: zone,
         camera: camera,
         timeRange: timeRange,
-      ).catchError((e) {
-        errorMsg ??= e.toString();
-        return const <AnalyticsSeries>[];
-      });
+      ).then((analytics) {
+        if (mounted) {
+          state = state.copyWith(analyticsSeries: analytics);
+        }
+      }).catchError((_) {});
 
-      final districtsFuture = repository.fetchDistricts().catchError((e) {
-        errorMsg ??= e.toString();
-        return state.districts;
-      });
-
-      final offenceDataFuture = repository.fetchOffenceCountData(
+      repository.fetchChallanCounts(
         district: district,
         zone: zone,
         camera: camera,
         timeRange: timeRange,
         customStartDate: customStartDate,
         customEndDate: customEndDate,
-      ).catchError((e) {
-        errorMsg ??= e.toString();
-        return const <String, dynamic>{};
-      });
+      ).then((challans) {
+        if (mounted) {
+          state = state.copyWith(
+            eChallan: challans['eChallan'],
+            manualChallan: challans['manualChallan'],
+            seizedVehicles: challans['seizedVehicles'],
+          );
+        }
+      }).catchError((_) {});
 
-      final offenceTypesFuture = repository.fetchOffenceTypes().catchError((e) {
-        errorMsg ??= e.toString();
-        return state.offenceTypes;
-      });
-
-      final challansFuture = repository.fetchChallanCounts(
-        district: district,
-        zone: zone,
-        camera: camera,
-        timeRange: timeRange,
-        customStartDate: customStartDate,
-        customEndDate: customEndDate,
-      ).catchError((e) {
-        errorMsg ??= e.toString();
-        return const <String, String>{};
-      });
-
-      final revenueFuture = repository.fetchMonthlyRevenue(
+      repository.fetchMonthlyRevenue(
         DateTime.now().year,
         district: district,
         zone: zone,
@@ -195,56 +191,15 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         timeRange: timeRange,
         customStartDate: customStartDate,
         customEndDate: customEndDate,
-      ).catchError((e) {
-        errorMsg ??= e.toString();
-        return const <String, double>{};
-      });
+      ).then((revenue) {
+        if (mounted) {
+          state = state.copyWith(monthlyRevenue: revenue);
+        }
+      }).catchError((_) {});
 
-      // Await all futures in parallel
-      final results = await Future.wait([
-        kpiFuture,
-        trafficFuture,
-        districtsFuture,
-        offenceDataFuture,
-        offenceTypesFuture,
-        challansFuture,
-        revenueFuture,
-      ]);
-
-      // Assign results safely using type-safety checks
-      final dynamic kpisResult = results[0];
-      final dynamic analyticsResult = results[1];
-      final dynamic districtsResult = results[2];
-      final dynamic offenceDataResult = results[3];
-      final dynamic offenceTypesResult = results[4];
-      final dynamic challansResult = results[5];
-      final dynamic revenueResult = results[6];
-
-      kpis = kpisResult is KpiSummary ? kpisResult : state.kpis;
-      analytics = analyticsResult is List<AnalyticsSeries> ? analyticsResult : state.analyticsSeries;
-      districts = districtsResult is List<String> ? districtsResult : state.districts;
-      offenceData = offenceDataResult is Map<String, dynamic> ? offenceDataResult : state.offenceData;
-      offenceTypes = offenceTypesResult is List<String> ? offenceTypesResult : state.offenceTypes;
-      challans = challansResult is Map<String, String> ? challansResult : challans;
-      monthlyRevenue = revenueResult is Map<String, double>
-          ? revenueResult
-          : Map<String, double>.from(revenueResult as Map);
-
-      state = state.copyWith(
-        kpis: kpis,
-        analyticsSeries: analytics,
-        districts: districts,
-        offenceData: offenceData,
-        offenceTypes: offenceTypes,
-        eChallan: challans['eChallan'],
-        manualChallan: challans['manualChallan'],
-        seizedVehicles: challans['seizedVehicles'],
-        monthlyRevenue: monthlyRevenue,
-        isLoading: false,
-        error: errorMsg,
-      );
     } catch (e) {
       debugPrint('Unhandled error in fetchDashboard: $e');
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -255,9 +210,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   /// Returns the auto-selected zone name if only one zone exists, else null.
   Future<String?> fetchZonesForDistrict(String district) async {
     debugPrint('Notifier fetchZonesForDistrict called for: $district');
+    if (!mounted) return null;
     state = state.copyWith(isLoading: true);
     try {
       final zonesList = await repository.fetchZones(district);
+      if (!mounted) return null;
       debugPrint('Notifier fetchZonesForDistrict success: $zonesList');
       state = state.copyWith(
         zones: zonesList,
@@ -272,6 +229,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     } catch (e, stack) {
       debugPrint('Notifier fetchZonesForDistrict error: $e');
       debugPrint(stack.toString());
+      if (!mounted) return null;
       state = state.copyWith(
         zones: const ['Select All Zone'],
         isLoading: false,
@@ -289,9 +247,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
   Future<void> fetchCamerasForZone(String zone) async {
     debugPrint('Notifier fetchCamerasForZone called for: $zone');
+    if (!mounted) return;
     state = state.copyWith(isLoading: true);
     try {
       final cameraData = await repository.fetchCameras(zone);
+      if (!mounted) return;
       final List<String> camerasList = ['Select All Camera'];
       final Map<String, String> lookup = {};
       for (final item in cameraData) {
@@ -313,6 +273,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     } catch (e, stack) {
       debugPrint('Notifier fetchCamerasForZone error: $e');
       debugPrint(stack.toString());
+      if (!mounted) return;
       state = state.copyWith(
         cameras: const ['Select All Camera'],
         cameraLocationToId: const {},

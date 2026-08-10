@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
-import '../../core/storage/secure_storage_service.dart';
 import 'dashboard_models.dart';
 import 'models/missing_certificate_model.dart';
 
@@ -178,26 +177,15 @@ class DashboardRepository {
     final response = await _apiClient.get<List<dynamic>>('/districts');
     final districtList = response.data ?? [];
 
-    final storage = SecureStorageService();
-    final assignedIds = await storage.readDistrictIds();
-
     final names = districtList
         .map((item) {
           if (item is Map) {
-            final id = int.tryParse(item['id']?.toString() ?? '');
-            if (assignedIds.isNotEmpty && (id == null || !assignedIds.contains(id))) {
-              return null;
-            }
             return item['districtName']?.toString();
           }
           return null;
         })
         .whereType<String>()
         .toList();
-
-    if (assignedIds.isNotEmpty && names.isNotEmpty) {
-      return names;
-    }
 
     return ['Select All District', ...names];
   }
