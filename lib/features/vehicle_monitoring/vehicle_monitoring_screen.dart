@@ -12,11 +12,17 @@ import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/widgets/loading_overlay.dart';
 import '../../core/widgets/page_header_banner.dart';
-import '../../core/widgets/network_image_helper.dart';
-import '../../core/widgets/image_zoom_helper.dart';
 import 'vehicle_monitoring_models.dart';
 import 'vehicle_monitoring_repository.dart';
 import 'previous_vcr_reports_dialog.dart';
+import 'widgets/vehicle_image_card.dart';
+import 'widgets/owner_information_card.dart';
+import 'widgets/offences_section.dart';
+import 'widgets/manual_challan_section.dart';
+import 'widgets/remarks_section.dart';
+import 'widgets/previous_vcr_section.dart';
+import 'widgets/vehicle_action_buttons.dart';
+import 'widgets/vehicle_header.dart';
 
 final vehicleMonitoringProvider =
     StateNotifierProvider.autoDispose<VehicleMonitoringNotifier, VehicleMonitoringState>((ref) {
@@ -394,7 +400,15 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     }
     final List<TextSpan> spans = [];
     
-    if (vehicle['pucCertificate'] == false) {
+    final String notifStr = (vehicle['notification'] ?? vehicle['offence'] ?? vehicle['violationType'] ?? '').toString().toLowerCase();
+    final bool hasExplicitPucNotif = notifStr.contains('puc');
+    final bool hasOtherViolation = vehicle['insurance'] == false ||
+        vehicle['roadTax'] == false ||
+        vehicle['permit'] == false ||
+        vehicle['fitnessCertificate'] == false ||
+        vehicle['registration'] == false;
+
+    if (vehicle['pucCertificate'] == false && (hasExplicitPucNotif || !hasOtherViolation)) {
       spans.add(const TextSpan(text: 'Puc Missing from RTA ', style: TextStyle(color: Color(0xFF333333))));
     }
     if (vehicle['insurance'] == false) {
@@ -727,38 +741,92 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
 
     final Set<Map<String, dynamic>> selectedOffences = {};
     
-    // Check and pre-select offences dynamically based on vehicle flags and strings
-    bool checkOffenceStatus(String name) {
-      final nameLower = name.toLowerCase();
-      if (nameLower.contains('road_tax') || nameLower.contains('roadtax')) {
-        return vehicle['roadTax'] == false;
-      }
-      if (nameLower.contains('permit')) {
-        return vehicle['permit'] == false;
-      }
-      if (nameLower.contains('fitness')) {
-        return vehicle['fitnessCertificate'] == false;
-      }
-      if (nameLower.contains('puc')) {
-        return vehicle['pucCertificate'] == false;
-      }
-      if (nameLower.contains('insurance')) {
-        return vehicle['insurance'] == false;
-      }
-      if (nameLower.contains('registration')) {
-        return vehicle['registration'] == false;
-      }
-      
-      // Text parsing for non-certificate offences (helmet, triple riding, numberplate, etc.)
-      final String remarksLower = (item['remarks']?.toString() ?? '').toLowerCase();
-      final String notificationLower = (item['notification']?.toString() ?? '').toLowerCase();
-      final cleanName = nameLower.replaceAll('_', ' ').replaceAll('certificate', '').trim();
-      return remarksLower.contains(cleanName) || notificationLower.contains(cleanName);
-    }
+    // Check if vehicle is explicitly marked All Clear
+    final bool isAllClear = vehicle['allClear'] == true ||
+        (item['notification']?.toString().toLowerCase() == 'all clear') ||
+        (item['notification']?.toString().toLowerCase() == 'all_clear');
 
-    for (final offence in availableOffences) {
-      if (checkOffenceStatus(offence['name'] as String)) {
-        selectedOffences.add(offence);
+    if (!isAllClear) {
+      // Extract notification text strictly from explicit payload notification/offence fields (NOT from auto-generated remarks)
+      final String itemNotifStr = (
+        item['notification'] ??
+        item['offence'] ??
+        item['offenceName'] ??
+        item['violationType'] ??
+        item['violations'] ??
+        ''
+      ).toString().trim();
+      final String notifLower = itemNotifStr.toLowerCase();
+
+      // Check and pre-select offences dynamically
+      bool checkOffenceStatus(String name) {
+        final nameLower = name.toLowerCase();
+        final cleanName = nameLower.replaceAll('_', ' ').replaceAll('certificate', '').trim();
+        
+        // 1. If explicit notification/offence text is present on the item record, match against it
+        if (notifLower.isNotEmpty &&
+            notifLower != 'n/a' &&
+            notifLower != 'all clear' &&
+            notifLower != 'all_clear' &&
+            !notifLower.contains('details not found')) {
+          if (notifLower.contains(nameLower) || notifLower.contains(cleanName)) {
+            return true;
+          }
+          if ((nameLower.contains('road_tax') || nameLower.contains('roadtax')) && (notifLower.contains('tax') || notifLower.contains('road'))) {
+            return true;
+          }
+          if (nameLower.contains('permit') && notifLower.contains('permit')) {
+            return true;
+          }
+          if (nameLower.contains('fitness') && notifLower.contains('fitness')) {
+            return true;
+          }
+          if (nameLower.contains('puc') && notifLower.contains('puc')) {
+            return true;
+          }
+          if (nameLower.contains('insurance') && notifLower.contains('insurance')) {
+            return true;
+          }
+          if (nameLower.contains('registration') && notifLower.contains('registration')) {
+            return true;
+          }
+          // Explicit notification text was provided and did not match this offence
+          return false;
+        }
+
+        // 2. Fallback: If no explicit notification text on item, check vehicle document status flags
+        if (nameLower.contains('road_tax') || nameLower.contains('roadtax')) {
+          return vehicle['roadTax'] == false;
+        }
+        if (nameLower.contains('permit')) {
+          return vehicle['permit'] == false;
+        }
+        if (nameLower.contains('fitness')) {
+          return vehicle['fitnessCertificate'] == false;
+        }
+        if (nameLower.contains('insurance')) {
+          return vehicle['insurance'] == false;
+        }
+        if (nameLower.contains('registration')) {
+          return vehicle['registration'] == false;
+        }
+        if (nameLower.contains('puc')) {
+          final bool hasOtherDocumentViolation = vehicle['insurance'] == false ||
+              vehicle['roadTax'] == false ||
+              vehicle['permit'] == false ||
+              vehicle['fitnessCertificate'] == false ||
+              vehicle['registration'] == false;
+          // Only pre-select PUC as fallback if PUC is false AND no other document violation is active
+          return vehicle['pucCertificate'] == false && !hasOtherDocumentViolation;
+        }
+
+        return false;
+      }
+
+      for (final offence in availableOffences) {
+        if (checkOffenceStatus(offence['name'] as String)) {
+          selectedOffences.add(offence);
+        }
       }
     }
 
@@ -787,102 +855,20 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                   borderRadius: BorderRadius.circular(16),
                   child: Column(
                     children: [
-                      // Header Row
-                      Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      // Vehicle Number Badge (dark blue)
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0F3260),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        child: Text(
-                                          vehicleNumber,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ),
-                                      // Category Badge (grey background)
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade200,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        child: Text(
-                                          vehicleCategory,
-                                          style: TextStyle(
-                                            color: Colors.grey.shade800,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                      // Vehicle Type Badge (light blue background)
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFE3F2FD),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        child: Text(
-                                          vehicleType,
-                                          style: const TextStyle(
-                                            color: Color(0xFF1E88E5),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Captured at $cameraName - $detectedAt',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Close Button
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.close, size: 20),
-                                onPressed: () {
-                                  customNameCtrl.dispose();
-                                  customAmountCtrl.dispose();
-                                  remarksCtrl.dispose();
-                                  Navigator.of(context).pop();
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
+                      // Vehicle Header
+                      VehicleHeader(
+                        vehicleNumber: vehicleNumber,
+                        vehicleCategory: vehicleCategory,
+                        vehicleType: vehicleType,
+                        cameraName: cameraName,
+                        detectedAt: detectedAt,
+                        onClose: () {
+                          customNameCtrl.dispose();
+                          customAmountCtrl.dispose();
+                          remarksCtrl.dispose();
+                          Navigator.of(context).pop();
+                        },
                       ),
-                      const Divider(height: 1),
 
                       // Scrollable Body
                       Expanded(
@@ -900,286 +886,76 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
                                       // Image Card
-                                      Card(
-                                        color: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                        clipBehavior: Clip.antiAlias,
-                                        elevation: 1,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                                          children: [
-                                            _buildVehicleImage(imgUrl, height: 260, fit: BoxFit.cover, onTap: () => showZoomedImageDialog(context, imgUrl)),
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                              child: Row(
-                                                children: [
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.grey.shade100,
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      cameraID,
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Colors.grey.shade700,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      cameraName,
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey.shade700,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                      overflow: TextOverflow.ellipsis,
-                                                      textAlign: TextAlign.end,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                      VehicleImageCard(
+                                        imageUrl: imgUrl,
+                                        cameraId: cameraID,
+                                        location: cameraName,
                                       ),
                                       const SizedBox(height: 8),
-
-                                      // Owner Information Card
-                                      Card(
-                                        color: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                        elevation: 1,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(12),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                'OWNER INFORMATION',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF0F3260),
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              const Divider(),
-                                              const SizedBox(height: 8),
-                                              _buildDetailRow('Name', vehicle['ownerName']?.toString()),
-                                              _buildDetailRow('Phone', vehicle['ownerMobileNo']?.toString()),
-                                              _buildDetailRow('Address', vehicle['ownerAddress']?.toString()),
-                                              _buildDetailRow('District', vehicle['districtName']?.toString()),
-                                              _buildDetailRow('Color', '-'),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                       // Owner Information Card
+                                       OwnerInformationCard(
+                                         ownerName: vehicle['ownerName']?.toString(),
+                                         phone: vehicle['ownerMobileNo']?.toString(),
+                                         address: vehicle['ownerAddress']?.toString(),
+                                         district: vehicle['districtName']?.toString(),
+                                         color: '-',
+                                       ),
                                     ],
                                   );
 
-                                  // Right side components: Offences / Irregularities + Selected List
+                                  // Right side components: Offences / Irregularities + Manual Challan (Single Card)
                                   final rightColumn = Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      Card(
-                                        color: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                        elevation: 1,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(12),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                'OFFENCES/IRREGULARITIES',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF0F3260),
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              const Divider(),
-                                              const SizedBox(height: 12),
-                                              Row(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  // Left: Selected Offences list
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        const Text(
-                                                          'SELECTED OFFENCES',
-                                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
-                                                        ),
-                                                        const SizedBox(height: 8),
-                                                        Container(
-                                                          height: 200,
-                                                          decoration: BoxDecoration(
-                                                            border: Border.all(color: Colors.grey.shade300),
-                                                            borderRadius: BorderRadius.circular(6),
-                                                            color: Colors.grey.shade50,
-                                                          ),
-                                                          child: selectedOffences.isEmpty
-                                                              ? const Center(
-                                                                  child: Text(
-                                                                    'No offence selected',
-                                                                    style: TextStyle(fontSize: 11, color: Colors.black38),
-                                                                  ),
-                                                                )
-                                                              : ListView(
-                                                                  padding: const EdgeInsets.all(6),
-                                                                  children: selectedOffences.map((offence) {
-                                                                    final offName = offence['name']?.toString() ?? '';
-                                                                    final offAmt = offence['amount'] as num? ?? 0.0;
-                                                                    return Container(
-                                                                      margin: const EdgeInsets.only(bottom: 6),
-                                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                                                      decoration: BoxDecoration(
-                                                                        color: Colors.white,
-                                                                        borderRadius: BorderRadius.circular(6),
-                                                                        border: Border.all(color: Colors.grey.shade300),
-                                                                      ),
-                                                                      child: Row(
-                                                                        children: [
-                                                                          Expanded(
-                                                                            child: Column(
-                                                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                                                              mainAxisSize: MainAxisSize.min,
-                                                                              children: [
-                                                                                Text(
-                                                                                  offName,
-                                                                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F3260)),
-                                                                                  maxLines: 2,
-                                                                                  overflow: TextOverflow.ellipsis,
-                                                                                ),
-                                                                                const SizedBox(height: 2),
-                                                                                Text(
-                                                                                  '₹ ${offAmt.toStringAsFixed(2)}',
-                                                                                  style: const TextStyle(fontSize: 10.5, color: Color(0xFF0D9488), fontWeight: FontWeight.bold),
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                          InkWell(
-                                                                            onTap: () {
-                                                                              setDialogState(() {
-                                                                                selectedOffences.remove(offence);
-                                                                              });
-                                                                            },
-                                                                            child: const Padding(
-                                                                              padding: EdgeInsets.all(4),
-                                                                              child: Icon(Icons.close, size: 16, color: Colors.red),
-                                                                            ),
-                                                                          ),
-                                                                        ],
-                                                                      ),
-                                                                    );
-                                                                  }).toList(),
-                                                                ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 16),
-                                                  // Right: List of offences select options
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        const Text(
-                                                          'LIST OF OFFENCES',
-                                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
-                                                        ),
-                                                        const SizedBox(height: 8),
-                                                        Container(
-                                                          height: 200,
-                                                          decoration: BoxDecoration(
-                                                            border: Border.all(color: Colors.grey.shade300),
-                                                            borderRadius: BorderRadius.circular(6),
-                                                          ),
-                                                          child: ListView.separated(
-                                                            padding: const EdgeInsets.all(6),
-                                                            itemCount: availableOffences.length,
-                                                            separatorBuilder: (context, index) => const SizedBox(height: 6),
-                                                            itemBuilder: (context, index) {
-                                                              final off = availableOffences[index];
-                                                              final bool isAlreadySelected = selectedOffences.any((element) => element['name'] == off['name']);
-                                                              final offName = off['name']?.toString() ?? '';
-                                                              final offAmt = off['amount'] as num? ?? 0.0;
-
-                                                              return InkWell(
-                                                                onTap: isAlreadySelected
-                                                                    ? null
-                                                                    : () {
-                                                                        setDialogState(() {
-                                                                          selectedOffences.add(off);
-                                                                        });
-                                                                      },
-                                                                child: Container(
-                                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                                                  decoration: BoxDecoration(
-                                                                    color: isAlreadySelected ? Colors.grey.shade100 : Colors.white,
-                                                                    borderRadius: BorderRadius.circular(6),
-                                                                    border: Border.all(color: Colors.grey.shade300),
-                                                                  ),
-                                                                  child: Row(
-                                                                    children: [
-                                                                      Icon(
-                                                                        Icons.arrow_back,
-                                                                        size: 14,
-                                                                        color: isAlreadySelected ? Colors.grey : const Color(0xFF0F3260),
-                                                                      ),
-                                                                      const SizedBox(width: 6),
-                                                                      Expanded(
-                                                                        child: Column(
-                                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                                          mainAxisSize: MainAxisSize.min,
-                                                                          children: [
-                                                                            Text(
-                                                                              offName,
-                                                                              style: TextStyle(
-                                                                                fontSize: 11,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: isAlreadySelected ? Colors.grey : Colors.black87,
-                                                                              ),
-                                                                              maxLines: 2,
-                                                                              overflow: TextOverflow.ellipsis,
-                                                                            ),
-                                                                            const SizedBox(height: 2),
-                                                                            Text(
-                                                                              '₹ ${offAmt.toStringAsFixed(2)}',
-                                                                              style: TextStyle(
-                                                                                fontSize: 10.5,
-                                                                                color: isAlreadySelected ? Colors.grey : const Color(0xFF0D9488),
-                                                                                fontWeight: FontWeight.bold,
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            },
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              // Remarks
-                                            ],
-                                          ),
+                                      OffencesSection(
+                                        availableOffences: availableOffences,
+                                        selectedOffences: selectedOffences,
+                                        onOffenceSelected: (offence) {
+                                          setDialogState(() {
+                                            selectedOffences.add(offence);
+                                          });
+                                        },
+                                        onOffenceRemoved: (offence) {
+                                          setDialogState(() {
+                                            selectedOffences.remove(offence);
+                                          });
+                                        },
+                                        manualChallanSection: ManualChallanSection(
+                                          customNameCtrl: customNameCtrl,
+                                          customAmountCtrl: customAmountCtrl,
+                                          customOffences: customOffences,
+                                          totalChallanAmount: totalChallanAmount,
+                                          addRowError: addRowError,
+                                          onAddOffence: () {
+                                            final name = customNameCtrl.text.trim();
+                                            final amtText = customAmountCtrl.text.trim();
+                                            final amt = double.tryParse(amtText) ?? 0.0;
+                                            if (name.isNotEmpty) {
+                                              setDialogState(() {
+                                                final newOffence = <String, dynamic>{'name': name, 'amount': amt};
+                                                customOffences.add(newOffence);
+                                                selectedOffences.add(newOffence);
+                                                customNameCtrl.clear();
+                                                customAmountCtrl.clear();
+                                                addRowError = null;
+                                              });
+                                            } else {
+                                              setDialogState(() {
+                                                addRowError = 'Please enter an offence name before adding';
+                                              });
+                                            }
+                                          },
+                                          onRemoveOffence: (idx) {
+                                            setDialogState(() {
+                                              final removed = customOffences.removeAt(idx);
+                                              selectedOffences.removeWhere((item) => item['name'] == removed['name']);
+                                            });
+                                          },
+                                          onClearError: () {
+                                            setDialogState(() {
+                                              addRowError = null;
+                                            });
+                                          },
                                         ),
                                       ),
                                     ],
@@ -1207,257 +983,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               ),
                               const SizedBox(height: 8),
 
-                              // Manual Challan / Additional Offences Card
-                              Card(
-                                color: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                elevation: 1,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'MANUAL CHALLAN / ADDITIONAL OFFENCES',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF0F3260),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final isMobile = constraints.maxWidth < 500;
-                                          
-                                          final offenceField = TextField(
-                                            controller: customNameCtrl,
-                                            decoration: InputDecoration(
-                                              hintText: 'Enter Offence Name',
-                                              hintStyle: const TextStyle(fontSize: 12),
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                            ),
-                                          );
-                                          
-                                          final amountField = TextField(
-                                            controller: customAmountCtrl,
-                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                            decoration: InputDecoration(
-                                              hintText: 'Enter Amount',
-                                              hintStyle: const TextStyle(fontSize: 12),
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                            ),
-                                          );
-                                          
-                                          final addButton = ElevatedButton(
-                                            onPressed: () {
-                                              final name = customNameCtrl.text.trim();
-                                              final amtText = customAmountCtrl.text.trim();
-                                              final amt = double.tryParse(amtText) ?? 0.0;
-                                              if (name.isNotEmpty) {
-                                                setDialogState(() {
-                                                  final newOffence = <String, dynamic>{'name': name, 'amount': amt};
-                                                  customOffences.add(newOffence);
-                                                  selectedOffences.add(newOffence);
-                                                  customNameCtrl.clear();
-                                                  customAmountCtrl.clear();
-                                                  addRowError = null;
-                                                });
-                                              } else {
-                                                setDialogState(() {
-                                                  addRowError = 'Please enter an offence name before adding';
-                                                });
-                                              }
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF007BFF),
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                            ),
-                                            child: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                          );
-
-                                          final Widget errorBanner = addRowError != null
-                                              ? Padding(
-                                                  padding: const EdgeInsets.only(bottom: 8),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(0xFFFFF3CD),
-                                                      borderRadius: BorderRadius.circular(6),
-                                                      border: Border.all(color: const Color(0xFFFFEEBA)),
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        const Icon(Icons.warning_amber_rounded, color: Color(0xFF856404), size: 16),
-                                                        const SizedBox(width: 6),
-                                                        Expanded(
-                                                          child: Text(
-                                                            addRowError!,
-                                                            style: const TextStyle(color: Color(0xFF856404), fontSize: 12, fontWeight: FontWeight.w600),
-                                                          ),
-                                                        ),
-                                                        GestureDetector(
-                                                          onTap: () {
-                                                            setDialogState(() {
-                                                              addRowError = null;
-                                                            });
-                                                          },
-                                                          child: const Icon(Icons.close, color: Color(0xFF856404), size: 16),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                )
-                                              : const SizedBox.shrink();
-
-                                          if (isMobile) {
-                                            return Column(
-                                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                                              children: [
-                                                errorBanner,
-                                                offenceField,
-                                                const SizedBox(height: 8),
-                                                Row(
-                                                  children: [
-                                                    Expanded(child: amountField),
-                                                    const SizedBox(width: 8),
-                                                    addButton,
-                                                  ],
-                                                ),
-                                              ],
-                                            );
-                                          } else {
-                                            return Column(
-                                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                                              children: [
-                                                errorBanner,
-                                                Row(
-                                                  children: [
-                                                    Expanded(flex: 3, child: offenceField),
-                                                    const SizedBox(width: 12),
-                                                    Expanded(flex: 2, child: amountField),
-                                                    const SizedBox(width: 12),
-                                                    addButton,
-                                                  ],
-                                                ),
-                                              ],
-                                            );
-                                          }
-                                        },
-                                      ),
-
-                                      if (customOffences.isNotEmpty) ...[
-                                        const SizedBox(height: 8),
-                                        ListView.builder(
-                                          shrinkWrap: true,
-                                          physics: const NeverScrollableScrollPhysics(),
-                                          itemCount: customOffences.length,
-                                          itemBuilder: (context, idx) {
-                                            final custom = customOffences[idx];
-                                            return Padding(
-                                              padding: const EdgeInsets.symmetric(vertical: 4),
-                                              child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Text('${custom['name']} (₹ ${(custom['amount'] as num).toStringAsFixed(2)})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F3260))),
-                                                  IconButton(
-                                                    icon: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 20),
-                                                    onPressed: () {
-                                                      setDialogState(() {
-                                                        final removed = customOffences.removeAt(idx);
-                                                        selectedOffences.removeWhere((item) => item['name'] == removed['name']);
-                                                      });
-                                                    },
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                      const SizedBox(height: 8),
-
-                                      // Total Challan Amount field on the right
-                                      LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final isMobile = constraints.maxWidth < 450;
-                                          
-                                          if (isMobile) {
-                                            return Column(
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              children: [
-                                                const Text(
-                                                  'Total Challan Amount',
-                                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                                ),
-                                                const SizedBox(height: 6),
-                                                Container(
-                                                  width: 150,
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(color: Colors.grey.shade400),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                    color: Colors.grey.shade100,
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                    children: [
-                                                      const Text('₹', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                                      Text(
-                                                        totalChallanAmount.toStringAsFixed(2),
-                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          } else {
-                                            return Align(
-                                              alignment: Alignment.centerRight,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Text(
-                                                    'Total Challan Amount',
-                                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  Container(
-                                                    width: 150,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                    decoration: BoxDecoration(
-                                                      border: Border.all(color: Colors.grey.shade400),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      color: Colors.grey.shade100,
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                      children: [
-                                                        const Text('₹', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                                        Text(
-                                                          totalChallanAmount.toStringAsFixed(2),
-                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-
-                              // Remarks Card
+                              // Combined Card: Remarks + Previous VCR Challans + Action Buttons
                               Card(
                                 color: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1467,445 +993,99 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                        'REMARKS',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF0F3260),
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Divider(),
-                                      const SizedBox(height: 8),
-                                      TextField(
+                                      RemarksSection(
                                         controller: remarksCtrl,
-                                        maxLines: 4,
-                                        minLines: 2,
-                                        style: const TextStyle(fontSize: 13),
-                                        decoration: InputDecoration(
-                                          hintText: 'Enter any additional remarks or observations...',
-                                          hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(6),
-                                            borderSide: BorderSide(color: Colors.grey.shade300),
-                                          ),
-                                          contentPadding: const EdgeInsets.all(12),
-                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 12),
+
+                                      PreviousVcrSection(
+                                        vehicleNumber: vehicleNumber,
+                                        state: state,
+                                        ref: ref,
+                                        item: item,
+                                        selectedOffences: selectedOffences.toList(),
+                                        onViewHistory: (vNo) {
+                                          _showNotificationHistoryDetailsDialog(context, vNo, state);
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 12),
+
+                                      VehicleActionButtons(
+                                        onPreviousVcrReports: () => PreviousVcrReportsDialog.show(context, vehicleNumber),
+                                        onCollect: () {
+                                          _showDriverDetailsAndSignatureDialog(
+                                            context,
+                                            actionType: 'Collect Fine',
+                                            item: item,
+                                            selectedOffences: selectedOffences.toList(),
+                                            customOffences: customOffences,
+                                            totalChallanAmount: totalChallanAmount,
+                                            remarksText: remarksCtrl.text,
+                                            ref: ref,
+                                          );
+                                        },
+                                        onRaiseChallan: () async {
+                                          final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
+                                          final vehicleNumber = (vehicle['vehicleNumber'] ?? vehicle['registrationNumber'] ?? item['vehicleNumber'] ?? '').toString();
+                                          final offenceNames = [
+                                            ...selectedOffences.map((o) => o['name']?.toString() ?? o['offence']?.toString() ?? ''),
+                                            ...customOffences.map((o) => o['name']?.toString() ?? ''),
+                                          ].where((s) => s.isNotEmpty).join(',');
+
+                                          final repo = VehicleMonitoringRepository(apiClient: ApiClient(SecureStorageService()));
+                                          final dupRes = await repo.checkDuplicateVcr(
+                                            registrationNumber: vehicleNumber,
+                                            offences: offenceNames,
+                                          );
+
+                                          if (dupRes['isDuplicate'] == true) {
+                                            if (context.mounted) {
+                                              _showPreviousVcrFoundDialog(
+                                                context,
+                                                duplicateData: dupRes,
+                                                vehicleNumber: vehicleNumber,
+                                                offenceNames: offenceNames,
+                                                item: item,
+                                                totalChallanAmount: totalChallanAmount,
+                                                remarksText: remarksCtrl.text,
+                                                ref: ref,
+                                              );
+                                            }
+                                          } else {
+                                            if (context.mounted) {
+                                              _executeGenerateChallan(
+                                                context,
+                                                actionType: 'Raise Challan',
+                                                item: item,
+                                                offenceNames: offenceNames,
+                                                totalChallanAmount: totalChallanAmount,
+                                                remarksText: remarksCtrl.text,
+                                                ref: ref,
+                                              );
+                                            }
+                                          }
+                                        },
+                                        onSeizeVehicle: () {
+                                          _showDriverDetailsAndSignatureDialog(
+                                            context,
+                                            actionType: 'Seize Vehicle',
+                                            item: item,
+                                            selectedOffences: selectedOffences.toList(),
+                                            customOffences: customOffences,
+                                            totalChallanAmount: totalChallanAmount,
+                                            remarksText: remarksCtrl.text,
+                                            ref: ref,
+                                          );
+                                        },
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
-                              // Previous VCR Challans Card
-                              FutureBuilder<List<Map<String, dynamic>>>(
-                                future: ref.read(vehicleMonitoringProvider.notifier).repository.fetchVcrHistory(vehicleNumber).then((list) async {
-                                  if (list.isNotEmpty) {
-                                    final validVcrs = <Map<String, dynamic>>[];
-                                    final seenKeys = <String>{};
-
-                                    for (final item in list) {
-                                      final notif = (item['notification'] ?? item['offence'] ?? item['violationType'] ?? item['remarks'] ?? '').toString().trim().toLowerCase();
-                                      if (notif == 'all clear' || notif == 'all_clear') continue;
-
-                                      final rawAmt = item['totalFineAmount'] ?? item['fineAmount'] ?? item['challanAmount'] ?? item['amount'] ?? item['totalAmount'] ?? 0.0;
-                                      final amt = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
-
-                                      final id = (item['id'] ?? item['vcrNo'] ?? item['challanNo'] ?? item['vehicleRecordId'] ?? '').toString();
-                                      final key = id.isNotEmpty ? id : '${notif}_$amt';
-                                      if (seenKeys.contains(key)) continue;
-                                      seenKeys.add(key);
-
-                                      validVcrs.add({
-                                        ...item,
-                                        'vehicleNumber': (item['vehicleNumber'] ?? vehicleNumber).toString(),
-                                        'challanAmount': amt,
-                                        'notification': notif,
-                                      });
-                                    }
-                                    if (validVcrs.isNotEmpty) {
-                                      final double totalAmt = validVcrs.fold(0.0, (sum, it) => sum + (it['challanAmount'] as double? ?? 0.0));
-                                      return [
-                                        {
-                                          'vehicleNumber': vehicleNumber,
-                                          'challanAmount': totalAmt,
-                                          'status': validVcrs.first['status'] ?? 'PENDING',
-                                          'createdTime': validVcrs.first['createdTime'] ?? '',
-                                        }
-                                      ];
-                                    }
-                                  }
-
-                                  final cleanVehicleNo = vehicleNumber.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-                                  final vcrSources = [...state.violations, ...state.notifications];
-                                  final matches = <Map<String, dynamic>>[];
-                                  final seenKeys = <String>{};
-
-                                  for (final it in vcrSources) {
-                                    if (it is Map) {
-                                      final vObj = it['vehicle'];
-                                      String vNo = '';
-                                      if (vObj is Map) {
-                                        vNo = (vObj['vehicleNumber'] ?? vObj['vehicleNo'] ?? vObj['registrationNumber'] ?? '').toString();
-                                      }
-                                      if (vNo.isEmpty) {
-                                        vNo = (it['vehicleNumber'] ?? it['vehicleNo'] ?? it['registrationNumber'] ?? '').toString();
-                                      }
-                                      final cleanVNo = vNo.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-                                      if (cleanVNo == cleanVehicleNo) {
-                                        final notif = (it['notification'] ?? it['offence'] ?? it['remarks'] ?? '').toString().trim().toLowerCase();
-                                        if (notif == 'all clear' || notif == 'all_clear') continue;
-
-                                        final rawAmt = (it['totalFineAmount'] ?? it['fineAmount'] ?? it['challanAmount'] ?? it['amount'] ?? it['totalAmount'] ?? 0.0);
-                                        final amt = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
-
-                                        final id = (it['id'] ?? it['notificationId'] ?? it['vcrNo'] ?? '').toString();
-                                        final key = id.isNotEmpty ? id : '${notif}_$amt';
-                                        if (seenKeys.contains(key)) continue;
-                                        seenKeys.add(key);
-
-                                        matches.add({
-                                          'vehicleNumber': vehicleNumber,
-                                          'challanAmount': amt,
-                                          'status': it['status'] ?? 'PENDING',
-                                          'createdTime': it['createdTime'] ?? it['timestamp'] ?? it['date'] ?? '',
-                                        });
-                                      }
-                                    }
-                                  }
-
-                                  if (matches.isNotEmpty) {
-                                    final double totalAmt = matches.fold(0.0, (sum, it) => sum + (it['challanAmount'] as double? ?? 0.0));
-                                    return [
-                                      {
-                                        'vehicleNumber': vehicleNumber,
-                                        'challanAmount': totalAmt,
-                                        'status': matches.first['status'] ?? 'PENDING',
-                                        'createdTime': matches.first['createdTime'] ?? '',
-                                      }
-                                    ];
-                                  }
-
-                                  // Fallback 2: Build record from current vehicle item offences / fine amount if > 0
-                                  final double offencesAmt = selectedOffences.fold(0.0, (sum, o) => sum + (o['amount'] as num? ?? 0.0).toDouble());
-                                  final rawItemAmt = item['totalFineAmount'] ?? item['fineAmount'] ?? item['challanAmount'] ?? item['amount'] ?? item['totalAmount'];
-                                  final double itemAmt = rawItemAmt is num ? rawItemAmt.toDouble() : (double.tryParse(rawItemAmt?.toString() ?? '') ?? 0.0);
-                                  final double displayAmt = offencesAmt > 0 ? offencesAmt : itemAmt;
-
-                                  if (displayAmt <= 0) return [];
-
-                                  return [
-                                    {
-                                      'vehicleNumber': vehicleNumber,
-                                      'challanAmount': displayAmt,
-                                      'status': item['status'] ?? 'PENDING',
-                                      'createdTime': item['createdTime'] ?? item['timestamp'] ?? '',
-                                    }
-                                  ];
-                                }),
-                                builder: (context, snapshot) {
-                                  final vcrList = snapshot.data ?? [];
-                                  final count = vcrList.length;
-
-                                  return Card(
-                                    color: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    elevation: 1,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(6),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey.shade100,
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: Icon(Icons.access_time_outlined, size: 18, color: Colors.grey.shade700),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  'PREVIOUS VCR CHALLANS  $count RECORDS',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color(0xFF0F3260),
-                                                    fontSize: 13,
-                                                    letterSpacing: 0.3,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 12),
-
-                                          // Navy Blue Table Header
-                                          Container(
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF0F3260),
-                                              borderRadius: BorderRadius.all(Radius.circular(4)),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                            child: const Row(
-                                              children: [
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Text(
-                                                    'VEHICLE',
-                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Text(
-                                                    'PREVIOUS AMOUNT',
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 2,
-                                                  child: Text(
-                                                    'ACTION',
-                                                    textAlign: TextAlign.right,
-                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-
-                                          if (snapshot.connectionState == ConnectionState.waiting)
-                                            const Padding(
-                                              padding: EdgeInsets.all(16),
-                                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                            )
-                                          else if (vcrList.isEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(vertical: 16),
-                                              child: Center(
-                                                child: Text(
-                                                  'No previous VCR reports for $vehicleNumber.',
-                                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                                                ),
-                                              ),
-                                            )
-                                          else
-                                            ListView.separated(
-                                              shrinkWrap: true,
-                                              physics: const NeverScrollableScrollPhysics(),
-                                              itemCount: vcrList.length,
-                                              separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
-                                              itemBuilder: (context, index) {
-                                                final record = vcrList[index];
-                                                final vNo = record['vehicleNumber']?.toString() ?? vehicleNumber;
-                                                final rawAmt = record['challanAmount'] ?? record['totalFineAmount'] ?? record['fineAmount'] ?? record['amount'] ?? record['totalAmount'] ?? 0;
-                                                final amtVal = rawAmt is num ? rawAmt.toDouble() : (double.tryParse(rawAmt.toString()) ?? 0.0);
-
-                                                return Padding(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                                  child: Row(
-                                                    children: [
-                                                      Expanded(
-                                                        flex: 3,
-                                                        child: Text(
-                                                          vNo,
-                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 3,
-                                                        child: Text(
-                                                          '₹${amtVal.toStringAsFixed(2)}',
-                                                          textAlign: TextAlign.center,
-                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Align(
-                                                          alignment: Alignment.centerRight,
-                                                          child: OutlinedButton(
-                                                            onPressed: () {
-                                                              _showNotificationHistoryDetailsDialog(context, vNo, state);
-                                                            },
-                                                            style: OutlinedButton.styleFrom(
-                                                              side: const BorderSide(color: Color(0xFF007BFF)),
-                                                              foregroundColor: const Color(0xFF007BFF),
-                                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                                              minimumSize: const Size(0, 30),
-                                                            ),
-                                                            child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                               ),
-                               const SizedBox(height: 8),
-
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: Card(
-                                    color: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    elevation: 1,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(14),
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final isMobile = constraints.maxWidth < 600;
-                                          final reportBtn = OutlinedButton.icon(
-                                            onPressed: () => PreviousVcrReportsDialog.show(context, vehicleNumber),
-                                            icon: const Icon(Icons.description, size: 16, color: Colors.black87),
-                                            label: const Text('Previous VCR Reports', style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                                            style: OutlinedButton.styleFrom(
-                                              side: BorderSide(color: Colors.grey.shade400),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                                            ),
-                                          );
-                                          final collectBtn = OutlinedButton(
-                                            onPressed: () {
-                                              _showDriverDetailsAndSignatureDialog(
-                                                context,
-                                                actionType: 'Collect Fine',
-                                                item: item,
-                                                selectedOffences: selectedOffences.toList(),
-                                                customOffences: customOffences,
-                                                totalChallanAmount: totalChallanAmount,
-                                                remarksText: remarksCtrl.text,
-                                                ref: ref,
-                                              );
-                                            },
-                                            style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(color: Color(0xFF28A745)),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                            ),
-                                            child: const Text('Collect', style: TextStyle(color: Color(0xFF28A745), fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                                          );
-                                          final raiseBtn = ElevatedButton(
-                                            onPressed: () async {
-                                              final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-                                              final vehicleNumber = (vehicle['vehicleNumber'] ?? vehicle['registrationNumber'] ?? item['vehicleNumber'] ?? '').toString();
-                                              final offenceNames = [
-                                                ...selectedOffences.map((o) => o['name']?.toString() ?? o['offence']?.toString() ?? ''),
-                                                ...customOffences.map((o) => o['name']?.toString() ?? ''),
-                                              ].where((s) => s.isNotEmpty).join(',');
-
-                                              final repo = VehicleMonitoringRepository(apiClient: ApiClient(SecureStorageService()));
-                                              final dupRes = await repo.checkDuplicateVcr(
-                                                registrationNumber: vehicleNumber,
-                                                offences: offenceNames,
-                                              );
-
-                                              if (dupRes['isDuplicate'] == true) {
-                                                if (context.mounted) {
-                                                  _showPreviousVcrFoundDialog(
-                                                    context,
-                                                    duplicateData: dupRes,
-                                                    vehicleNumber: vehicleNumber,
-                                                    offenceNames: offenceNames,
-                                                    item: item,
-                                                    totalChallanAmount: totalChallanAmount,
-                                                    remarksText: remarksCtrl.text,
-                                                    ref: ref,
-                                                  );
-                                                }
-                                              } else {
-                                                if (context.mounted) {
-                                                  _executeGenerateChallan(
-                                                    context,
-                                                    actionType: 'Raise Challan',
-                                                    item: item,
-                                                    offenceNames: offenceNames,
-                                                    totalChallanAmount: totalChallanAmount,
-                                                    remarksText: remarksCtrl.text,
-                                                    ref: ref,
-                                                  );
-                                                }
-                                              }
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF198754),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                            ),
-                                            child: const Text('Raise Challan', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                                          );
-                                          final seizeBtn = ElevatedButton(
-                                            onPressed: () {
-                                              _showDriverDetailsAndSignatureDialog(
-                                                context,
-                                                actionType: 'Seize Vehicle',
-                                                item: item,
-                                                selectedOffences: selectedOffences.toList(),
-                                                customOffences: customOffences,
-                                                totalChallanAmount: totalChallanAmount,
-                                                remarksText: remarksCtrl.text,
-                                                ref: ref,
-                                              );
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFFDC3545),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                            ),
-                                            child: const Text('Seize Vehicle', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                                          );
-
-                                          if (isMobile) {
-                                            return Column(
-                                              children: [
-                                                Row(
-                                                  children: [
-                                                    Expanded(flex: 3, child: reportBtn),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(flex: 2, child: collectBtn),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Row(
-                                                  children: [
-                                                    Expanded(child: raiseBtn),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(child: seizeBtn),
-                                                  ],
-                                                ),
-                                              ],
-                                            );
-                                          }
-
-                                          return Row(
-                                            children: [
-                                              Expanded(flex: 3, child: reportBtn),
-                                              const SizedBox(width: 8),
-                                              Expanded(flex: 2, child: collectBtn),
-                                              const SizedBox(width: 8),
-                                              Expanded(flex: 2, child: raiseBtn),
-                                              const SizedBox(width: 8),
-                                              Expanded(flex: 2, child: seizeBtn),
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
                              ],
                            ),
                          ),
@@ -1921,63 +1101,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     );
   }
 
-  Widget _buildVehicleImage(String imgUrl, {double? height, BoxFit fit = BoxFit.cover, VoidCallback? onTap}) {
-    final clean = imgUrl.trim();
-    if (clean.isEmpty) {
-      return GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: height ?? 200,
-          color: const Color(0xFF0F3260),
-          child: const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.directions_car, size: 48, color: Colors.white70),
-                SizedBox(height: 8),
-                Text('Telangana ANPR Capture', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    if (clean.startsWith('assets/')) {
-      return GestureDetector(
-        onTap: onTap,
-        child: Image.asset(clean, height: height, fit: fit),
-      );
-    }
-    return buildPlatformNetImage(clean, height: height, fit: fit, onTap: onTap);
-  }
 
-  Widget _buildDetailRow(String label, String? value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              '$label:',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value ?? 'N/A',
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
 
   Widget _buildDropdownField({
@@ -2722,25 +1846,36 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
   }
 
   String _deriveViolationText(Map<String, dynamic> vehicle, Map<String, dynamic> item) {
-    final notification = item['notification']?.toString() ?? '';
-    final remarks = item['remarks']?.toString() ?? '';
+    final notification = (item['notification'] ?? item['offence'] ?? item['offenceName'] ?? item['violationType'] ?? '').toString().trim();
+    final remarks = (item['remarks'] ?? '').toString().trim();
     
     if (notification.toLowerCase().contains('details not found') ||
         remarks.toLowerCase().contains('details not found')) {
       return 'DETAILS NOT FOUND.';
     }
 
+    if (notification.isNotEmpty &&
+        notification != 'N/A' &&
+        notification != 'ALL CLEAR' &&
+        notification != 'all_clear') {
+      return notification.toUpperCase();
+    }
+
     final List<String> violations = [];
-    if (vehicle['pucCertificate'] == false) violations.add('PUC MISSING FROM RTA IN...');
     if (vehicle['insurance'] == false) violations.add('INSURANCE VIOLATION');
     if (vehicle['roadTax'] == false) violations.add('ROAD TAX VIOLATION');
     if (vehicle['permit'] == false) violations.add('PERMIT VIOLATION');
     if (vehicle['fitnessCertificate'] == false) violations.add('FITNESS VIOLATION');
     if (vehicle['registration'] == false) violations.add('REGISTRATION VIOLATION');
+
+    final bool hasExplicitPuc = notification.toLowerCase().contains('puc') || remarks.toLowerCase().contains('puc');
+    if (vehicle['pucCertificate'] == false && (hasExplicitPuc || violations.isEmpty)) {
+      violations.add('PUC MISSING FROM RTA IN...');
+    }
     
     if (violations.isEmpty) {
       if (vehicle['allClear'] == true) return 'ALL CLEAR';
-      return notification.isNotEmpty ? notification.toUpperCase() : remarks.toUpperCase();
+      return remarks.isNotEmpty ? remarks.toUpperCase() : 'ALL CLEAR';
     }
     return violations.join(', ');
   }
@@ -2829,57 +1964,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
             (vehicle['cameraName']?.toString().toLowerCase().contains(_localCamera.toLowerCase()) ?? false);
       }
 
-      // Vehicle Type Filter
-      bool matchesVehicleType = _localVehicleType == 'Select All Vehicle Type' || _localVehicleType.isEmpty;
-      if (!matchesVehicleType) {
-        final cat = (vehicle['vehicleCategory'] ?? '').toString();
-        final vt = (vehicle['vehicleType'] ?? '').toString();
-        if (_localVehicleType == 'Transport') {
-          matchesVehicleType = cat == 'T' || vt.toLowerCase().contains('transport') || _deriveVehicleType(vehicle).contains('TRANSPORT');
-        } else if (_localVehicleType == 'Non-Transport' || _localVehicleType == 'Non-transport') {
-          matchesVehicleType = cat == 'NT' || vt.toLowerCase().contains('non') || _deriveVehicleType(vehicle).contains('NON-TRANSPORT');
-        } else {
-          matchesVehicleType = vt.toLowerCase() == _localVehicleType.toLowerCase();
-        }
-      }
-
-      // Violation Type Filter
-      bool matchesViolationType = _localViolationType == 'Select All Violation Type' || _localViolationType.isEmpty;
-      if (!matchesViolationType) {
-        final sel = _localViolationType;
-        final selLower = sel.toLowerCase();
-
-        final String remarksLower = (item['remarks']?.toString() ?? '').toLowerCase();
-        final String notificationLower = (item['notification']?.toString() ?? '').toLowerCase();
-        final String offenceLower = (item['offence']?.toString() ?? vehicle['offence']?.toString() ?? '').toLowerCase();
-        final cleanSel = selLower.replaceAll('_', ' ').replaceAll('certificate', '').trim();
-
-        bool hasTextMatch = remarksLower.contains(cleanSel) ||
-            notificationLower.contains(cleanSel) ||
-            offenceLower.contains(cleanSel) ||
-            offenceLower.contains(selLower) ||
-            remarksLower.contains(selLower);
-
-        bool hasFlagMatch = false;
-        if (sel == 'Puc Missing' || selLower.contains('puc')) {
-          hasFlagMatch = vehicle['pucCertificate'] == false;
-        } else if (sel == 'Insurance Violation' || selLower.contains('insurance')) {
-          hasFlagMatch = vehicle['insurance'] == false;
-        } else if (sel == 'Road Tax Violation' || selLower.contains('road_tax') || selLower.contains('roadtax')) {
-          hasFlagMatch = vehicle['roadTax'] == false;
-        } else if (sel == 'Permit Violation' || selLower.contains('permit')) {
-          hasFlagMatch = vehicle['permit'] == false;
-        } else if (sel == 'Fitness Violation' || selLower.contains('fitness')) {
-          hasFlagMatch = vehicle['fitnessCertificate'] == false;
-        } else if (sel == 'Registration Violation' || selLower.contains('registration')) {
-          hasFlagMatch = vehicle['registration'] == false;
-        } else if (sel == 'All Clear') {
-          hasFlagMatch = vehicle['allClear'] == true;
-        }
-
-        matchesViolationType = hasTextMatch || hasFlagMatch;
-      }
-
       // Search Box Filter
       bool matchesSearch = searchLower.isEmpty;
       if (!matchesSearch) {
@@ -2889,7 +1973,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         matchesSearch = plateMatch || cameraMatch || remarksMatch;
       }
 
-      return matchesDistrict && matchesZone && matchesCamera && matchesVehicleType && matchesViolationType && matchesSearch;
+      return matchesDistrict && matchesZone && matchesCamera && matchesSearch;
     }).toList();
 
     // Sort
@@ -3063,25 +2147,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         onChanged: (value) => setState(() => _localTimeRange = value ?? 'Select All Time Range'),
                       );
 
-                      final vehicleTypes = ['Select All Vehicle Type', 'Non-Transport', 'Transport'];
-                      final vehicleTypeDropdown = _buildDropdownField(
-                        hint: 'Select Vehicle Type',
-                        value: _localVehicleType,
-                        options: vehicleTypes,
-                        onChanged: (value) => setState(() => _localVehicleType = value ?? 'Select All Vehicle Type'),
-                      );
-
-                      final violationTypes = [
-                        'Select All Violation Type',
-                        ...state.offenceTypes,
-                      ];
-                      final violationTypeDropdown = _buildDropdownField(
-                        hint: 'Select Violation Type',
-                        value: _localViolationType,
-                        options: violationTypes,
-                        onChanged: (value) => setState(() => _localViolationType = value ?? 'Select All Violation Type'),
-                      );
-
                       final applyButton = FilledButton.icon(
                         onPressed: () {
                           setState(() {
@@ -3091,8 +2156,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                             districtName: _localDistrict,
                             zoneName: _localZone,
                             cameraId: _localCamera,
-                            vehicleType: _localVehicleType,
-                            violationType: _localViolationType,
                           );
                         },
                         icon: const Icon(Icons.check, size: 16, color: Colors.white),
@@ -3126,14 +2189,6 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           Row(
                             children: [
                               Expanded(child: cameraDropdown),
-                              const SizedBox(width: 12),
-                              Expanded(child: vehicleTypeDropdown),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(child: violationTypeDropdown),
                               const SizedBox(width: 12),
                               Expanded(child: timeRangeDropdown),
                             ],
