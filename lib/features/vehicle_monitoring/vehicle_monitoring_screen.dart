@@ -490,11 +490,17 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         ),
                       ),
                       const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 20, color: Colors.black54),
-                        onPressed: () => Navigator.of(context).pop(),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                          onPressed: () => Navigator.of(context).pop(),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
                       ),
                     ],
                   ),
@@ -1132,6 +1138,23 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
       ),
+      selectedItemBuilder: (BuildContext context) {
+        return options.map<Widget>((String option) {
+          String displayLabel = option;
+          if (option == 'Select All District') displayLabel = 'Select District';
+          if (option == 'Select All Zone') displayLabel = 'Select Zone';
+          if (option == 'Select All Camera') displayLabel = 'Select Camera';
+          if (option == 'Select All Vehicle Type') displayLabel = 'Select Vehicle Type';
+          if (option == 'Select All Violation Type') displayLabel = 'Select Violation Type';
+          if (option == 'Select All Time Range') displayLabel = 'Select Time Range';
+          return Text(
+            displayLabel,
+            style: const TextStyle(fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          );
+        }).toList();
+      },
       items: options
           .map(
             (option) {
@@ -1139,6 +1162,9 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
               if (option == 'Select All District') displayLabel = 'Select District';
               if (option == 'Select All Zone') displayLabel = 'Select Zone';
               if (option == 'Select All Camera') displayLabel = 'Select Camera';
+              if (option == 'Select All Vehicle Type') displayLabel = 'Select Vehicle Type';
+              if (option == 'Select All Violation Type') displayLabel = 'Select Violation Type';
+              if (option == 'Select All Time Range') displayLabel = 'Select Time Range';
               return DropdownMenuItem<String>(
                 value: option,
                 child: Text(displayLabel, style: const TextStyle(fontSize: 13)),
@@ -1964,6 +1990,20 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
             (vehicle['cameraName']?.toString().toLowerCase().contains(_localCamera.toLowerCase()) ?? false);
       }
 
+      // Vehicle Type Filter
+      bool matchesVehicleType = _localVehicleType == 'Select All Vehicle Type' || _localVehicleType.isEmpty;
+      if (!matchesVehicleType) {
+        final derived = _deriveVehicleType(vehicle).toLowerCase();
+        matchesVehicleType = derived.contains(_localVehicleType.toLowerCase());
+      }
+
+      // Violation Type Filter
+      bool matchesViolationType = _localViolationType == 'Select All Violation Type' || _localViolationType.isEmpty;
+      if (!matchesViolationType) {
+        final notifStr = (item['notification'] ?? item['offence'] ?? item['violationType'] ?? item['remarks'] ?? '').toString().toLowerCase();
+        matchesViolationType = notifStr.contains(_localViolationType.toLowerCase());
+      }
+
       // Search Box Filter
       bool matchesSearch = searchLower.isEmpty;
       if (!matchesSearch) {
@@ -1973,7 +2013,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         matchesSearch = plateMatch || cameraMatch || remarksMatch;
       }
 
-      return matchesDistrict && matchesZone && matchesCamera && matchesSearch;
+      return matchesDistrict && matchesZone && matchesCamera && matchesVehicleType && matchesViolationType && matchesSearch;
     }).toList();
 
     // Sort
@@ -2009,6 +2049,11 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
     );
 
     final timeRangeOptions = ['Select All Time Range', 'Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days'];
+    final List<String> vehicleTypes = ['Select All Vehicle Type', 'Non-Transport', 'Transport'];
+    final List<String> violationTypes = [
+      'Select All Violation Type',
+      ...state.offenceTypes,
+    ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F6F6),
@@ -2140,6 +2185,20 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                         onChanged: (value) => setState(() => _localCamera = value ?? 'Select All Camera'),
                       );
 
+                      final vehicleTypeDropdown = _buildDropdownField(
+                        hint: 'Select Vehicle Type',
+                        value: _localVehicleType,
+                        options: vehicleTypes,
+                        onChanged: (value) => setState(() => _localVehicleType = value ?? 'Select All Vehicle Type'),
+                      );
+
+                      final violationTypeDropdown = _buildDropdownField(
+                        hint: 'Select Violation Type',
+                        value: _localViolationType,
+                        options: violationTypes,
+                        onChanged: (value) => setState(() => _localViolationType = value ?? 'Select All Violation Type'),
+                      );
+
                       final timeRangeDropdown = _buildDropdownField(
                         hint: 'Select Time Range',
                         value: _localTimeRange,
@@ -2156,6 +2215,8 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                             districtName: _localDistrict,
                             zoneName: _localZone,
                             cameraId: _localCamera,
+                            vehicleType: _localVehicleType,
+                            violationType: _localViolationType,
                           );
                         },
                         icon: const Icon(Icons.check, size: 16, color: Colors.white),
@@ -2191,6 +2252,14 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                               Expanded(child: cameraDropdown),
                               const SizedBox(width: 12),
                               Expanded(child: timeRangeDropdown),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(child: vehicleTypeDropdown),
+                              const SizedBox(width: 12),
+                              Expanded(child: violationTypeDropdown),
                             ],
                           ),
                           const SizedBox(height: 12),

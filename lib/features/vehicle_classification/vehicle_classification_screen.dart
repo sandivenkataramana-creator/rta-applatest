@@ -248,7 +248,18 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                             ],
                           ),
                         ),
-                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
+                        Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ),
                       ],
                     ),
                   ),

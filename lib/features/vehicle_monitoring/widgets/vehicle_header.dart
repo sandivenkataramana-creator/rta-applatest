@@ -102,12 +102,12 @@ class VehicleHeader extends StatelessWidget {
               ),
               // Close Button
               Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                decoration: const BoxDecoration(
+                  color: Colors.red,
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.close, size: 20),
+                  icon: const Icon(Icons.close, size: 20, color: Colors.white),
                   onPressed: onClose,
                 ),
               ),

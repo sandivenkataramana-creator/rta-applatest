@@ -1038,23 +1038,57 @@ class _StringDropdownFilter extends StatelessWidget {
           isExpanded: true,
           isDense: true,
           icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: Color(0xFF718096)),
-          items: items.map(
-            (item) => DropdownMenuItem<String>(
-              value: item,
-              child: Row(
+          selectedItemBuilder: (BuildContext context) {
+            return items.map<Widget>((item) {
+              String label = item;
+              if (item == 'Select All Vehicle Type') label = 'Select Vehicle Type';
+              if (item == 'Select All Violation Type') label = 'Select Violation Type';
+              if (item == 'Select All District') label = 'Select District';
+              if (item == 'Select All Zone') label = 'Select Zone';
+              if (item == 'Select All Camera') label = 'Select Camera';
+              if (item == 'Select All Time Range') label = 'Select Time Range';
+              return Row(
                 children: [
                   Icon(icon, size: 15, color: _tealLight),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      item,
+                      label,
                       style: const TextStyle(fontSize: 12, color: Color(0xFF4A5568)),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                 ],
-              ),
-            ),
+              );
+            }).toList();
+          },
+          items: items.map(
+            (item) {
+              String label = item;
+              if (item == 'Select All Vehicle Type') label = 'Select Vehicle Type';
+              if (item == 'Select All Violation Type') label = 'Select Violation Type';
+              if (item == 'Select All District') label = 'Select District';
+              if (item == 'Select All Zone') label = 'Select Zone';
+              if (item == 'Select All Camera') label = 'Select Camera';
+              if (item == 'Select All Time Range') label = 'Select Time Range';
+              return DropdownMenuItem<String>(
+                value: item,
+                child: Row(
+                  children: [
+                    Icon(icon, size: 15, color: _tealLight),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF4A5568)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ).toList(),
           onChanged: onChanged,
         ),

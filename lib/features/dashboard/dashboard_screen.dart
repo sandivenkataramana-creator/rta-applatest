@@ -952,6 +952,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             label = 'Select Zone';
           } else if (item == 'Select All Camera') {
             label = 'Select Camera';
+          } else if (item == 'Select All Vehicle Type') {
+            label = 'Select Vehicle Type';
+          } else if (item == 'Select All Violation Type') {
+            label = 'Select Violation Type';
+          } else if (item == 'Select All Time Range') {
+            label = 'Select Time Range';
           }
           return Text(
             label,
@@ -970,6 +976,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 label = 'Select Zone';
               } else if (option == 'Select All Camera') {
                 label = 'Select Camera';
+              } else if (option == 'Select All Vehicle Type') {
+                label = 'Select Vehicle Type';
+              } else if (option == 'Select All Violation Type') {
+                label = 'Select Violation Type';
+              } else if (option == 'Select All Time Range') {
+                label = 'Select Time Range';
               }
               return DropdownMenuItem<String>(
                 value: option,
@@ -2578,9 +2590,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           color: Color(0xFF0F3260),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
                       ),
                     ],
                   ),
@@ -2786,9 +2806,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ],
                               ),
                             ),
-                            IconButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                                onPressed: () => Navigator.of(context).pop(),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
                             ),
                           ],
                         ),
@@ -2959,9 +2987,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               color: const Color(0xFF1E2A5E),
                             ),
                           ),
-                          IconButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.close, color: Colors.grey, size: 22),
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                              onPressed: () => Navigator.of(context).pop(),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
                           ),
                         ],
                       ),
