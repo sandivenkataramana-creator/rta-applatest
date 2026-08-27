@@ -63,11 +63,31 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
       ),
+      selectedItemBuilder: (BuildContext context) {
+        return options.map<Widget>((String opt) {
+          String displayLabel = opt;
+          if (opt == 'Select All District') displayLabel = 'Select District';
+          if (opt == 'Select All Zone') displayLabel = 'Select Zone';
+          if (opt == 'Select All Camera') displayLabel = 'Select Camera';
+          if (opt == 'Select All Vehicle Type') displayLabel = 'Select Vehicle Type';
+          if (opt == 'Select All Violation Type') displayLabel = 'Select Violation Type';
+          if (opt == 'Select All Time Range') displayLabel = 'Select Time Range';
+          return Text(
+            displayLabel,
+            style: const TextStyle(fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          );
+        }).toList();
+      },
       items: options.map((opt) {
         String displayLabel = opt;
         if (opt == 'Select All District') displayLabel = 'Select District';
         if (opt == 'Select All Zone') displayLabel = 'Select Zone';
         if (opt == 'Select All Camera') displayLabel = 'Select Camera';
+        if (opt == 'Select All Vehicle Type') displayLabel = 'Select Vehicle Type';
+        if (opt == 'Select All Violation Type') displayLabel = 'Select Violation Type';
+        if (opt == 'Select All Time Range') displayLabel = 'Select Time Range';
         return DropdownMenuItem<String>(value: opt, child: Text(displayLabel, style: const TextStyle(fontSize: 13)));
       }).toList(),
       onChanged: onChanged,
@@ -150,7 +170,18 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                             ],
                           ),
                         ),
-                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
+                        Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ),
                       ],
                     ),
                   ),

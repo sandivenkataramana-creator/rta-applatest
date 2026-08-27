@@ -88,13 +88,43 @@ class VehicleHistoryNotifier extends StateNotifier<VehicleHistoryState> {
     );
 
     try {
-      // 1. Search by vehicle number
-      final searchRes = await classificationRepo.searchByVehicleNumber(query);
-      final vehicleMap = searchRes?['vehicle'] as Map<String, dynamic>?;
-      
+      // 1. Search by vehicle number from RTA endpoint
+      Map<String, dynamic>? vehicleMap;
+      try {
+        final searchRes = await classificationRepo.searchByVehicleNumber(query);
+        // The RTA endpoint may return the vehicle nested under 'vehicle' key,
+        // or directly as the response body.
+        vehicleMap = searchRes?['vehicle'] as Map<String, dynamic>?
+            ?? (searchRes != null && searchRes.containsKey('vehicleNumber') ? searchRes : null);
+      } catch (e) {
+        debugPrint('Error fetching vehicle from RTA search: $e');
+      }
+
       int? vehicleId = vehicleMap?['id'] as int?;
-      
-      // 2. Fetch expiry details if we have vehicle ID
+
+      // 2. Fetch search notifications (detections history) early so we can
+      //    use the vehicle data from it as a fallback if the RTA search failed.
+      List<dynamic> searchNotifications = const [];
+      try {
+        searchNotifications = await classificationRepo.searchNotificationsByVehicleNumber(query);
+      } catch (e) {
+        debugPrint('Error fetching notifications list: $e');
+      }
+
+      // Fallback: if the RTA endpoint returned no vehicle data, extract it
+      // from the first notification result's 'vehicle' field.
+      if (vehicleMap == null && searchNotifications.isNotEmpty) {
+        final firstItem = searchNotifications.first;
+        if (firstItem is Map<String, dynamic>) {
+          final notifVehicle = firstItem['vehicle'];
+          if (notifVehicle is Map<String, dynamic>) {
+            vehicleMap = notifVehicle;
+            vehicleId ??= notifVehicle['id'] as int?;
+          }
+        }
+      }
+
+      // 3. Fetch expiry details if we have vehicle ID
       List<dynamic> expiry = const [];
       if (vehicleId != null) {
         try {
@@ -104,20 +134,12 @@ class VehicleHistoryNotifier extends StateNotifier<VehicleHistoryState> {
         }
       }
 
-      // 3. Fetch active challans
+      // 4. Fetch active challans
       Map<String, dynamic>? challansMap;
       try {
         challansMap = await classificationRepo.getVehicleChallansByNumber(query);
       } catch (e) {
         debugPrint('Error fetching challan details: $e');
-      }
-
-      // 4. Fetch search notifications (detections history)
-      List<dynamic> searchNotifications = const [];
-      try {
-        searchNotifications = await classificationRepo.searchNotificationsByVehicleNumber(query);
-      } catch (e) {
-        debugPrint('Error fetching notifications list: $e');
       }
 
       state = state.copyWith(
