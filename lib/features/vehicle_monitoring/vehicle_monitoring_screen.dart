@@ -300,23 +300,39 @@ class VehicleMonitoringNotifier extends StateNotifier<VehicleMonitoringState> {
     fetchViolations();
   }
 
+  // Tracks the most-recent search query to discard stale API responses.
+  String _lastSearchQuery = '';
+
   void updateSearch(String value) {
     state = state.copyWith(searchText: value);
-    searchVehicleDynamic(value);
+    // Don't trigger API on every keystroke — caller decides when to search.
   }
 
   Future<void> searchVehicleDynamic(String query) async {
     final cleanQuery = query.replaceAll(RegExp(r'\s+'), '').trim();
     if (cleanQuery.isEmpty) {
+      _lastSearchQuery = '';
+      // Restore both lists by re-fetching from server
       fetchViolations();
+      fetchNotifications();
       return;
     }
 
+    _lastSearchQuery = cleanQuery;
     state = state.copyWith(isLoading: true);
     try {
       final results = await repository.searchVehicle(cleanQuery);
-      state = state.copyWith(violations: results, isLoading: false);
+      // Only apply results if this is still the latest search (avoid race conditions).
+      if (_lastSearchQuery != cleanQuery) return;
+      // Update both violations (live feed) AND notifications (history view)
+      // so the search works regardless of which tab/mode is active.
+      state = state.copyWith(
+        violations: results,
+        notifications: results,
+        isLoading: false,
+      );
     } catch (error) {
+      if (_lastSearchQuery != cleanQuery) return;
       state = state.copyWith(error: error.toString(), isLoading: false);
     }
   }
@@ -753,7 +769,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         (item['notification']?.toString().toLowerCase() == 'all_clear');
 
     if (!isAllClear) {
-      // Extract notification text strictly from explicit payload notification/offence fields (NOT from auto-generated remarks)
+      // Extract notification and remarks text to detect violations vs missing-from-DB entries.
       final String itemNotifStr = (
         item['notification'] ??
         item['offence'] ??
@@ -763,11 +779,53 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         ''
       ).toString().trim();
       final String notifLower = itemNotifStr.toLowerCase();
+      final String remarksRaw = (item['remarks']?.toString() ?? '');
+
+      // Build a set of keyword tokens that are flagged as "missing" (absent from DB).
+      // e.g. notification: "Puc missing and no_seatbelt violation"
+      //      remarks:      "PUC_CERTIFICATEmissing\nNO_SEATBELT_CERTIFICATE"
+      // → missingKeywords = {'puc'}  (NOT 'no_seatbelt')
+      final Set<String> missingKeywords = {};
+
+      // Helper: check every word/token before "missing" in a text
+      void extractMissingKeywords(String text) {
+        final lower = text.toLowerCase();
+        // Split on whitespace, newlines, underscores to get tokens
+        final tokens = lower.split(RegExp(r'[\s\n_]+'));
+        for (int i = 0; i < tokens.length; i++) {
+          if (tokens[i] == 'missing' && i > 0) {
+            // The token right before "missing" is the missing item keyword
+            missingKeywords.add(tokens[i - 1]);
+          }
+        }
+        // Also catch concatenated forms like "PUC_CERTIFICATEmissing"
+        // by searching for "missing" inside each underscore-split segment
+        for (final segment in text.split('\n')) {
+          final seg = segment.trim().toLowerCase();
+          if (seg.contains('missing')) {
+            final beforeMissing = seg.split('missing').first.replaceAll('_', ' ').trim();
+            // Add all words from beforeMissing as keywords
+            for (final word in beforeMissing.split(' ')) {
+              if (word.isNotEmpty) missingKeywords.add(word);
+            }
+          }
+        }
+      }
+
+      extractMissingKeywords(itemNotifStr);
+      extractMissingKeywords(remarksRaw);
+
+      // Helper: returns true if a keyword appears in text followed immediately by "missing"
+      bool isKeywordMissing(String keyword) {
+        return missingKeywords.contains(keyword.toLowerCase());
+      }
 
       // Check and pre-select offences dynamically
       bool checkOffenceStatus(String name) {
         final nameLower = name.toLowerCase();
         final cleanName = nameLower.replaceAll('_', ' ').replaceAll('certificate', '').trim();
+        // Also build underscore version for matching e.g. "no_seatbelt" in notification
+        final cleanNameUnderscored = cleanName.replaceAll(' ', '_');
         
         // 1. If explicit notification/offence text is present on the item record, match against it
         if (notifLower.isNotEmpty &&
@@ -775,26 +833,47 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
             notifLower != 'all clear' &&
             notifLower != 'all_clear' &&
             !notifLower.contains('details not found')) {
-          if (notifLower.contains(nameLower) || notifLower.contains(cleanName)) {
-            return true;
+
+          // Check name / cleanName (with space and underscore variants) in notification OR remarks
+          for (final candidate in [nameLower, cleanName, cleanNameUnderscored]) {
+            if (candidate.isEmpty) continue;
+
+            // Check if this candidate is a "missing" entry — use the pre-built missingKeywords set.
+            // A candidate is considered missing if any significant word in it is flagged as missing.
+            bool candidateIsMissing() {
+              for (final word in candidate.split(RegExp(r'[\s_]+'))) {
+                if (word.isNotEmpty && isKeywordMissing(word)) return true;
+              }
+              return false;
+            }
+
+            // Check in notification (present and not a missing-from-DB entry)
+            if (notifLower.contains(candidate) && !candidateIsMissing()) return true;
+            // Check in remarks — only match lines that do NOT contain "missing"
+            for (final line in remarksRaw.split('\n')) {
+              final lineLower = line.trim().toLowerCase();
+              if (lineLower.contains(candidate) && !lineLower.contains('missing')) return true;
+            }
           }
+
           if ((nameLower.contains('road_tax') || nameLower.contains('roadtax')) && (notifLower.contains('tax') || notifLower.contains('road'))) {
-            return true;
+            if (!isKeywordMissing('tax') && !isKeywordMissing('road')) return true;
           }
           if (nameLower.contains('permit') && notifLower.contains('permit')) {
-            return true;
+            if (!isKeywordMissing('permit')) return true;
           }
           if (nameLower.contains('fitness') && notifLower.contains('fitness')) {
-            return true;
+            if (!isKeywordMissing('fitness')) return true;
           }
           if (nameLower.contains('puc') && notifLower.contains('puc')) {
-            return true;
+            // "Puc missing" → absent from DB, not a violation
+            if (!isKeywordMissing('puc')) return true;
           }
           if (nameLower.contains('insurance') && notifLower.contains('insurance')) {
-            return true;
+            if (!isKeywordMissing('insurance')) return true;
           }
           if (nameLower.contains('registration') && notifLower.contains('registration')) {
-            return true;
+            if (!isKeywordMissing('registration')) return true;
           }
           // Explicit notification text was provided and did not match this offence
           return false;
@@ -2320,8 +2399,9 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                     Expanded(
                       child: TextField(
                         controller: _searchController,
+                        textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
-                          hintText: 'Search anything...',
+                          hintText: 'Search by vehicle number (e.g. TG30A9185)...',
                           prefixIcon: const Icon(Icons.search, size: 20),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(
@@ -2329,6 +2409,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                                   onPressed: () {
                                     _searchController.clear();
                                     notifier.updateSearch('');
+                                    notifier.searchVehicleDynamic('');
                                     setState(() {
                                       _currentPage = 1;
                                     });
@@ -2340,11 +2421,35 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           contentPadding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                         onChanged: (val) {
+                          // Only update local text state; API search is on submit/Enter.
                           notifier.updateSearch(val);
                           setState(() {
                             _currentPage = 1;
                           });
                         },
+                        onSubmitted: (val) {
+                          // Trigger vehicle-number API search on Enter.
+                          notifier.searchVehicleDynamic(val);
+                          setState(() {
+                            _currentPage = 1;
+                          });
+                        },
+                      ),
+                    ),
+                    // Search button
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () {
+                        notifier.searchVehicleDynamic(_searchController.text);
+                        setState(() => _currentPage = 1);
+                      },
+                      icon: const Icon(Icons.search, size: 16, color: Colors.white),
+                      label: const Text('Search', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D9488),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                   ],

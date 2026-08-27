@@ -171,6 +171,25 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
     final remarks = (item['remarks']?.toString() ?? '').toLowerCase();
     final notification = (item['notification']?.toString() ?? '').toLowerCase();
 
+    // Build a set of offence keys that are flagged as "missing" in remarks/notification.
+    // Remarks format can be e.g. "PUC_CERTIFICATEmissing\nNO_SEATBELT_CERTIFICATE".
+    // A line/token is "missing" if the word "missing" appears right after the offence key
+    // (with or without a space/underscore separator).
+    final Set<String> missingOffences = {};
+    final rawRemarks = (item['remarks']?.toString() ?? '');
+    final rawNotification = (item['notification']?.toString() ?? '');
+    for (final line in [...rawRemarks.split('\n'), ...rawNotification.split('\n')]) {
+      final trimmed = line.trim().toUpperCase();
+      // e.g. "PUC_CERTIFICATEmissing"  or  "PUC_CERTIFICATE missing"
+      if (trimmed.contains('MISSING')) {
+        // Extract everything before "MISSING" as the offence key candidate
+        final beforeMissing = trimmed.split('MISSING').first.trim().replaceAll(' ', '_');
+        if (beforeMissing.isNotEmpty) {
+          missingOffences.add(beforeMissing);
+        }
+      }
+    }
+
     for (final config in configs) {
       if (config is! Map) continue;
       final offenceName = config['offence']?.toString() ?? '';
@@ -179,6 +198,9 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
       final offenceUpper = offenceName.toUpperCase();
       if (addedOffences.contains(offenceUpper)) continue;
 
+      // Skip offences that are flagged as "missing" (absent from DB) — not a real violation.
+      if (missingOffences.contains(offenceUpper)) continue;
+
       final cleanName = offenceUpper
           .replaceAll('_', ' ')
           .replaceAll('CERTIFICATE', '')
@@ -186,6 +208,21 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
           .toLowerCase();
 
       if (cleanName.isNotEmpty && (remarks.contains(cleanName) || notification.contains(cleanName))) {
+        // Double-check: skip if the matched text in remarks/notification is followed by "missing"
+        final remarksRaw = rawRemarks.toLowerCase();
+        final notifRaw = rawNotification.toLowerCase();
+        final cleanLower = cleanName.toLowerCase();
+        bool isMissingInText(String text) {
+          int idx = text.indexOf(cleanLower);
+          while (idx != -1) {
+            final after = text.substring(idx + cleanLower.length).trimLeft();
+            if (after.startsWith('missing')) return true;
+            idx = text.indexOf(cleanLower, idx + 1);
+          }
+          return false;
+        }
+        if (isMissingInText(remarksRaw) || isMissingInText(notifRaw)) continue;
+
         final double amount = double.tryParse(config['challanAmount']?.toString() ?? '0.0') ?? 0.0;
         final formattedLabel = offenceName
             .replaceAll('_', ' ')
