@@ -1200,6 +1200,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
         : (options.isNotEmpty ? options.first : null);
 
     return DropdownButtonFormField<String>(
+      key: ValueKey('$hint-$safeValue'),
       isExpanded: true,
       isDense: true,
       initialValue: safeValue,
@@ -2162,7 +2163,7 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                 children: [
                   const Expanded(
                     child: PageHeaderBanner(
-                      title: 'Vehicle Monitoring & History',
+                      title: 'Vehicle History',
                       subtitle: 'Government of Telangana Transport Department',
                     ),
                   ),
@@ -2399,6 +2400,8 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                     Expanded(
                       child: TextField(
                         controller: _searchController,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [UpperCaseTextFormatter()],
                         textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
                           hintText: 'Search by vehicle number (e.g. TG30A9185)...',
@@ -2421,35 +2424,25 @@ class _VehicleMonitoringScreenState extends ConsumerState<VehicleMonitoringScree
                           contentPadding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                         onChanged: (val) {
-                          // Only update local text state; API search is on submit/Enter.
-                          notifier.updateSearch(val);
+                          final upper = val.toUpperCase();
+                          if (val != upper) {
+                            _searchController.value = TextEditingValue(
+                              text: upper,
+                              selection: TextSelection.collapsed(offset: upper.length),
+                            );
+                          }
+                          notifier.updateSearch(upper);
+                          notifier.searchVehicleDynamic(upper);
                           setState(() {
                             _currentPage = 1;
                           });
                         },
                         onSubmitted: (val) {
-                          // Trigger vehicle-number API search on Enter.
                           notifier.searchVehicleDynamic(val);
                           setState(() {
                             _currentPage = 1;
                           });
                         },
-                      ),
-                    ),
-                    // Search button
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: () {
-                        notifier.searchVehicleDynamic(_searchController.text);
-                        setState(() => _currentPage = 1);
-                      },
-                      icon: const Icon(Icons.search, size: 16, color: Colors.white),
-                      label: const Text('Search', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                   ],

@@ -99,7 +99,7 @@ class _ZoomableImageViewerState extends State<_ZoomableImageViewer> {
               right: 16,
               child: SafeArea(
                 child: CircleAvatar(
-                  backgroundColor: Colors.white24,
+                  backgroundColor: Colors.red,
                   radius: 20,
                   child: IconButton(
                     icon: const Icon(Icons.close, color: Colors.white, size: 22),

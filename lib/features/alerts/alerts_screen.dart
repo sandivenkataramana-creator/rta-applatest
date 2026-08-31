@@ -52,6 +52,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   }) {
     final String? safeValue = (value != null && options.contains(value)) ? value : (options.isNotEmpty ? options.first : null);
     return DropdownButtonFormField<String>(
+      key: ValueKey('$hint-$safeValue'),
       isExpanded: true,
       isDense: true,
       initialValue: safeValue,

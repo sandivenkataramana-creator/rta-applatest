@@ -1,4 +1,5 @@
 // lib/features/auth/auth_repository_impl.dart
+import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import 'auth_repository.dart';
@@ -19,10 +20,22 @@ class AuthRepositoryImpl implements AuthRepository {
     required String username,
     required String password,
   }) async {
-    final response = await _apiClient.get<Map<String, dynamic>>(
-      '/auth/login',
-      queryParameters: {'username': username, 'password': password},
-    );
+    Response<Map<String, dynamic>> response;
+    try {
+      response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {'username': username, 'password': password},
+      );
+    } catch (e) {
+      if (e is ApiException && (e.code == 405 || e.code == 404 || e.code == 403)) {
+        response = await _apiClient.get<Map<String, dynamic>>(
+          '/auth/login',
+          queryParameters: {'username': username, 'password': password},
+        );
+      } else {
+        rethrow;
+      }
+    }
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       final body = response.data ?? <String, dynamic>{};
