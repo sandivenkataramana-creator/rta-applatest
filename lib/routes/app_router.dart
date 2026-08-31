@@ -24,15 +24,19 @@ import '../features/support/presentation/screens/support_ticket_details_screen.d
 import '../features/cameras/camera_health_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final authNotifier = ref.watch(authNotifierProvider.notifier);
+  final refreshListenable = GoRouterRefreshStream(authNotifier.authChangeStream);
+
+  ref.onDispose(() {
+    refreshListenable.dispose();
+  });
 
   return GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: false,
-    refreshListenable: GoRouterRefreshStream(
-      ref.watch(authNotifierProvider.notifier).authChangeStream,
-    ),
+    refreshListenable: refreshListenable,
     redirect: (context, state) {
+      final authState = ref.read(authNotifierProvider);
       final isInitializing = authState.isInitializing;
       final loggedIn = authState.isAuthenticated;
       final currentLoc = state.uri.toString();

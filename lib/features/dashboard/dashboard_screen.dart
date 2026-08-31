@@ -64,7 +64,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     
     // Auto Refresh every 20 seconds
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _refreshDashboardData();
     });
   }

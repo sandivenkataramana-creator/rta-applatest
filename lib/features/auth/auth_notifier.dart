@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
@@ -53,10 +54,22 @@ class _LegacyAuthRepository {
     String password,
     bool rememberMe,
   ) async {
-    final response = await _apiClient.get<Map<String, dynamic>>(
-      '/auth/login',
-      queryParameters: {'username': username, 'password': password},
-    );
+    Response<Map<String, dynamic>> response;
+    try {
+      response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {'username': username, 'password': password},
+      );
+    } catch (e) {
+      if (e is ApiException && (e.code == 405 || e.code == 404 || e.code == 403)) {
+        response = await _apiClient.get<Map<String, dynamic>>(
+          '/auth/login',
+          queryParameters: {'username': username, 'password': password},
+        );
+      } else {
+        rethrow;
+      }
+    }
     final data = response.data ?? <String, dynamic>{};
     final access = data['token']?.toString() ?? data['accessToken']?.toString() ?? '';
     final refresh = data['refreshToken']?.toString() ?? '';
@@ -206,5 +219,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isInitializing: false,
     );
     _authChanges.add(null);
+  }
+
+  @override
+  void dispose() {
+    _authChanges.close();
+    super.dispose();
   }
 }
