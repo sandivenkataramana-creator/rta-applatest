@@ -54,22 +54,14 @@ class _LegacyAuthRepository {
     String password,
     bool rememberMe,
   ) async {
-    Response<Map<String, dynamic>> response;
-    try {
-      response = await _apiClient.post<Map<String, dynamic>>(
-        '/auth/login',
-        data: {'username': username, 'password': password},
-      );
-    } catch (e) {
-      if (e is ApiException && (e.code == 405 || e.code == 404 || e.code == 403)) {
-        response = await _apiClient.get<Map<String, dynamic>>(
-          '/auth/login',
-          queryParameters: {'username': username, 'password': password},
-        );
-      } else {
-        rethrow;
-      }
-    }
+      final response = await _apiClient.post<Map<String, dynamic>>(
+  '/auth/login',
+  data: {
+    'username': username,
+    'password': password,
+  },
+);
+   
     final data = response.data ?? <String, dynamic>{};
     final access = data['token']?.toString() ?? data['accessToken']?.toString() ?? '';
     final refresh = data['refreshToken']?.toString() ?? '';
@@ -130,14 +122,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final remember = await storage.readRememberMe();
       final token = await storage.readToken();
-      final username = await storage.readUsername() ?? 'admin';
+      final username = await storage.readUsername();
       
-      if (remember && token != null && token.trim().isNotEmpty) {
-        final role = username.contains('super')
-            ? 'Super Admin'
-            : username.contains('admin')
-            ? 'RTA Administrator'
-            : 'Enforcement Officer';
+      if (remember &&
+          token != null &&
+          token.trim().isNotEmpty &&
+          username != null &&
+          username.trim().isNotEmpty) {
+        final payload = parseJwtPayload(token);
+        final rawRoles = payload['roles'];
+        final String serverRole = (rawRoles is List && rawRoles.isNotEmpty)
+            ? rawRoles.first.toString()
+            : (payload['role']?.toString() ?? '');
+        final role = _resolveRole(serverRole, username);
         final user = AuthUser(
           username: username,
           name: username.toUpperCase(),
@@ -165,6 +162,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  String _resolveRole(String serverRole, String username) {
+    if (serverRole.isNotEmpty) {
+      if (serverRole.toLowerCase() == 'admin') {
+        return 'RTA Administrator';
+      } else {
+        return serverRole[0].toUpperCase() + serverRole.substring(1);
+      }
+    } else {
+      final lower = username.toLowerCase();
+      return lower.contains('super')
+          ? 'Super Admin'
+          : lower.contains('admin')
+          ? 'RTA Administrator'
+          : lower.contains('enforce')
+          ? 'Enforcement Officer'
+          : lower.contains('check')
+          ? 'Checkpost Officer'
+          : 'Supervisor';
+    }
+  }
+
   Future<void> login(String username, String password, bool rememberMe) async {
     final result = await repository.login(username, password, rememberMe);
     final AuthToken token;
@@ -179,24 +197,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       throw Exception('Invalid login result');
     }
 
-    String role;
-    if (serverRole.isNotEmpty) {
-      if (serverRole.toLowerCase() == 'admin') {
-        role = 'RTA Administrator';
-      } else {
-        role = serverRole[0].toUpperCase() + serverRole.substring(1);
-      }
-    } else {
-      role = username.contains('super')
-          ? 'Super Admin'
-          : username.contains('admin')
-          ? 'RTA Administrator'
-          : username.contains('enforce')
-          ? 'Enforcement Officer'
-          : username.contains('check')
-          ? 'Checkpost Officer'
-          : 'Supervisor';
-    }
+    final role = _resolveRole(serverRole, username);
 
     final user = AuthUser(
       username: username,

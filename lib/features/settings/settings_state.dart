@@ -243,24 +243,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       await loadUsers();
       return true;
     } catch (e) {
-      final mockNewUser = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'username': username,
-        'email': email,
-        'passwordHash': password,
-        'mobileNumber': mobileNumber,
-        'firstName': firstName,
-        'lastName': lastName.isEmpty ? null : lastName,
-        'role': role,
-        'roleIds': roleIds,
-        'createdAt': DateTime.now().toIso8601String(),
-        'signature': signatureBase64,
-      };
       state = state.copyWith(
-        users: [mockNewUser, ...state.users],
+        error: e.toString(),
         isLoading: false,
       );
-      return true;
+      return false;
     }
   }
 
@@ -288,22 +275,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       await loadUsers();
       return true;
     } catch (e) {
-      final updatedList = state.users.map((u) {
-        if (u is Map && (u['id'] == id || (u['id']?.toString() == id.toString()) || u['username'] == username)) {
-          return {
-            ...u,
-            'username': username,
-            'firstName': firstName,
-            'lastName': lastName,
-            'email': email,
-            'mobileNumber': mobileNumber,
-            'role': role,
-          };
-        }
-        return u;
-      }).toList();
-      state = state.copyWith(users: updatedList, isLoading: false);
-      return true;
+      state = state.copyWith(
+        error: e.toString(),
+        isLoading: false,
+      );
+      return false;
     }
   }
 
@@ -314,17 +290,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       await loadUsers();
       return true;
     } catch (e) {
-      final updated = state.users.where((user) {
-        if (user is Map) {
-          return user['id'] != id;
-        }
-        return true;
-      }).toList();
       state = state.copyWith(
-        users: updated,
+        error: e.toString(),
         isLoading: false,
       );
-      return true;
+      return false;
     }
   }
 
@@ -348,38 +318,15 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isLoading: true);
     try {
       await repository.createRole(roleName, permissionIds, isActive: isActive);
-      final updatedRoles = await repository.fetchRoles();
-      if (updatedRoles.isNotEmpty) {
-        state = state.copyWith(roles: updatedRoles, isLoading: false);
-      } else {
-        final newRole = {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'roleName': roleName,
-          'permissionIds': permissionIds,
-          'isActive': isActive,
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-        };
-        state = state.copyWith(
-          roles: [...state.roles, newRole],
-          isLoading: false,
-        );
-      }
+      await loadRoles();
+      state = state.copyWith(isLoading: false);
       return true;
-    } catch (_) {
-      final newRole = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'roleName': roleName,
-        'permissionIds': permissionIds,
-        'isActive': isActive,
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-      };
+    } catch (e) {
       state = state.copyWith(
-        roles: [...state.roles, newRole],
+        error: e.toString(),
         isLoading: false,
       );
-      return true;
+      return false;
     }
   }
 
@@ -401,36 +348,15 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isLoading: true);
     try {
       await repository.createPermission(permissionName, isActive: isActive);
-      final updatedPerms = await repository.fetchPermissions();
-      if (updatedPerms.isNotEmpty) {
-        state = state.copyWith(permissions: updatedPerms, isLoading: false);
-      } else {
-        final newPermission = {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'permissionName': permissionName,
-          'isActive': isActive,
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-        };
-        state = state.copyWith(
-          permissions: [...state.permissions, newPermission],
-          isLoading: false,
-        );
-      }
+      await loadPermissions();
+      state = state.copyWith(isLoading: false);
       return true;
-    } catch (_) {
-      final newPermission = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'permissionName': permissionName,
-        'isActive': isActive,
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-      };
+    } catch (e) {
       state = state.copyWith(
-        permissions: [...state.permissions, newPermission],
+        error: e.toString(),
         isLoading: false,
       );
-      return true;
+      return false;
     }
   }
 
@@ -472,22 +398,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       await repository.createOffence(data);
       await loadOffenceConfigs();
       return true;
-    } catch (_) {
-      final newOff = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'offence': data['offence'],
-        'challanAmount': double.tryParse(data['challanAmount']?.toString() ?? '0') ?? 0.0,
-        'duplicateDays': int.tryParse(data['duplicateDays']?.toString() ?? '1') ?? 1,
-        'gracePeriodDays': int.tryParse(data['gracePeriodDays']?.toString() ?? '0') ?? 0,
-        'isActive': data['isActive'] ?? true,
-        'created_time': DateTime.now().toIso8601String(),
-        'updated_time': DateTime.now().toIso8601String(),
-      };
+    } catch (e) {
       state = state.copyWith(
-        offenceConfigs: [newOff, ...state.offenceConfigs],
+        error: e.toString(),
         isLoading: false,
       );
-      return true;
+      return false;
     }
   }
 
@@ -511,22 +427,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       await repository.updateOffence(id, data);
       await loadOffenceConfigs();
       return true;
-    } catch (_) {
-      final updated = state.offenceConfigs.map((o) {
-        if (o is Map && o['id']?.toString() == id.toString()) {
-          final Map<String, dynamic> mutable = Map<String, dynamic>.from(o);
-          if (data.containsKey('offence')) mutable['offence'] = data['offence'];
-          if (data.containsKey('challanAmount')) mutable['challanAmount'] = data['challanAmount'];
-          if (data.containsKey('duplicateDays')) mutable['duplicateDays'] = data['duplicateDays'];
-          if (data.containsKey('gracePeriodDays')) mutable['gracePeriodDays'] = data['gracePeriodDays'];
-          if (data.containsKey('isActive')) mutable['isActive'] = data['isActive'];
-          mutable['updated_time'] = DateTime.now().toIso8601String();
-          return mutable;
-        }
-        return o;
-      }).toList();
-      state = state.copyWith(offenceConfigs: updated, isLoading: false);
-      return true;
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString(),
+        isLoading: false,
+      );
+      return false;
     }
   }
 }

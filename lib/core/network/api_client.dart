@@ -17,11 +17,20 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+class ApiConfig {
+  const ApiConfig._();
+
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://tgrta-anpr.in/api',
+  );
+}
+
 class ApiClient {
   ApiClient._(this._storage)
     : _dio = Dio(
         BaseOptions(
-          baseUrl: 'https://tgrta-anpr.in/api',
+          baseUrl: ApiConfig.baseUrl,
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 60),
           sendTimeout: const Duration(seconds: 15),
@@ -62,7 +71,7 @@ class ApiClient {
             final authHeaderPresent = options.headers.containsKey(
               'Authorization',
             );
-            debugPrint('→ ${options.method} $printUri');
+            debugPrint('→ ${options.method} ${options.path}');
             debugPrint('   Authorization header present: $authHeaderPresent');
           }
           handler.next(options);
@@ -72,7 +81,6 @@ class ApiClient {
             debugPrint(
               '← ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.uri}',
             );
-            debugPrint('   Response: ${response.data}');
           }
           handler.next(response);
         },
@@ -81,9 +89,6 @@ class ApiClient {
             debugPrint('‼ ${err.type} ${err.message}');
             debugPrint(
               '   Request: ${err.requestOptions.method} ${err.requestOptions.uri}',
-            );
-            debugPrint(
-              '   Response: ${err.response?.statusCode} ${err.response?.data}',
             );
           }
           handler.next(err);

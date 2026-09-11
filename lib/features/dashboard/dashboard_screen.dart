@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import 'package:intl/intl.dart';
-
+import 'package:intl/intl.dart'; 
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
