@@ -1,13 +1,15 @@
-import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:dio/dio.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/services/file_download_service.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/widgets/page_header_banner.dart';
-import '../../core/utils/pdf_helper.dart';
+import 'challan_export_provider.dart';
+import 'challan_export_request_model.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
@@ -18,10 +20,10 @@ class ExportDistrict {
   final String code;
 
   factory ExportDistrict.fromJson(Map<String, dynamic> j) => ExportDistrict(
-        id: j['id'] as int,
-        name: j['districtName']?.toString() ?? '',
-        code: j['districtCode']?.toString() ?? '',
-      );
+    id: j['id'] as int,
+    name: j['districtName']?.toString() ?? '',
+    code: j['districtCode']?.toString() ?? '',
+  );
 }
 
 class ExportCamera {
@@ -31,12 +33,13 @@ class ExportCamera {
   final int? zoneId;
 
   factory ExportCamera.fromJson(Map<String, dynamic> j) => ExportCamera(
-        id: (j['id'] as num).toInt(),
-        name: j['cameraName']?.toString() ??
-            j['name']?.toString() ??
-            'Camera ${j['id']}',
-        zoneId: j['zoneId'] != null ? (j['zoneId'] as num).toInt() : null,
-      );
+    id: (j['id'] as num).toInt(),
+    name:
+        j['cameraName']?.toString() ??
+        j['name']?.toString() ??
+        'Camera ${j['id']}',
+    zoneId: j['zoneId'] != null ? (j['zoneId'] as num).toInt() : null,
+  );
 }
 
 class ExportZone {
@@ -82,7 +85,7 @@ class VehicleExportState {
   final bool isLoadingZones;
   final bool isLoadingCameras;
   final bool isExporting;
-  final String? exportResult; // success url or message
+  final Uint8List? exportResult;
   final String? error;
   final String selectedTimeRange;
   final String selectedVehicleType;
@@ -122,18 +125,22 @@ class VehicleExportState {
       selectedCameraId: selectedCameraId == _sentinel
           ? this.selectedCameraId
           : selectedCameraId as int?,
-      startDate: startDate == _sentinel ? this.startDate : startDate as DateTime?,
+      startDate: startDate == _sentinel
+          ? this.startDate
+          : startDate as DateTime?,
       endDate: endDate == _sentinel ? this.endDate : endDate as DateTime?,
       isLoadingDistricts: isLoadingDistricts ?? this.isLoadingDistricts,
       isLoadingZones: isLoadingZones ?? this.isLoadingZones,
       isLoadingCameras: isLoadingCameras ?? this.isLoadingCameras,
       isExporting: isExporting ?? this.isExporting,
-      exportResult:
-          exportResult == _sentinel ? this.exportResult : exportResult as String?,
+      exportResult: exportResult == _sentinel
+          ? this.exportResult
+          : exportResult as Uint8List?,
       error: error == _sentinel ? this.error : error as String?,
       selectedTimeRange: selectedTimeRange ?? this.selectedTimeRange,
       selectedVehicleType: selectedVehicleType ?? this.selectedVehicleType,
-      selectedViolationType: selectedViolationType ?? this.selectedViolationType,
+      selectedViolationType:
+          selectedViolationType ?? this.selectedViolationType,
     );
   }
 }
@@ -166,7 +173,14 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
         if (raw is List) {
           list = raw;
         } else if (raw is Map) {
-          for (final key in ['data', 'content', 'result', 'offences', 'items', 'list']) {
+          for (final key in [
+            'data',
+            'content',
+            'result',
+            'offences',
+            'items',
+            'list',
+          ]) {
             if (raw[key] is List) {
               list = raw[key] as List;
               break;
@@ -175,7 +189,12 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
         }
         if (list != null && list.isNotEmpty) {
           offenceTypes = list
-              .map((e) => (e is Map ? (e['offence'] ?? e['offenceName'] ?? e['name'] ?? '').toString() : e.toString()))
+              .map(
+                (e) => (e is Map
+                    ? (e['offence'] ?? e['offenceName'] ?? e['name'] ?? '')
+                          .toString()
+                    : e.toString()),
+              )
               .where((s) => s.isNotEmpty)
               .toList();
         }
@@ -189,7 +208,14 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
           if (raw is List) {
             list = raw;
           } else if (raw is Map) {
-            for (final key in ['data', 'content', 'result', 'offences', 'items', 'list']) {
+            for (final key in [
+              'data',
+              'content',
+              'result',
+              'offences',
+              'items',
+              'list',
+            ]) {
               if (raw[key] is List) {
                 list = raw[key] as List;
                 break;
@@ -198,7 +224,12 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
           }
           if (list != null && list.isNotEmpty) {
             offenceTypes = list
-                .map((e) => (e is Map ? (e['offence'] ?? e['offenceName'] ?? e['name'] ?? '').toString() : e.toString()))
+                .map(
+                  (e) => (e is Map
+                      ? (e['offence'] ?? e['offenceName'] ?? e['name'] ?? '')
+                            .toString()
+                      : e.toString()),
+                )
                 .where((s) => s.isNotEmpty)
                 .toList();
           }
@@ -237,22 +268,19 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
       );
       final districtName = Uri.encodeComponent(district.name);
 
-      final res = await _api.get<List<dynamic>>(
-        '/rtaOffices/$districtName',
-      );
+      final res = await _api.get<List<dynamic>>('/rtaOffices/$districtName');
 
       final zones = (res.data ?? [])
           .whereType<Map<String, dynamic>>()
-          .map((item) => ExportZone(
-                id: (item['id'] as num).toInt(),
-                name: item['officeName']?.toString() ?? 'Office ${item['id']}',
-              ))
+          .map(
+            (item) => ExportZone(
+              id: (item['id'] as num).toInt(),
+              name: item['officeName']?.toString() ?? 'Office ${item['id']}',
+            ),
+          )
           .toList();
 
-      state = state.copyWith(
-        isLoadingZones: false,
-        zones: zones,
-      );
+      state = state.copyWith(isLoadingZones: false, zones: zones);
     } catch (e) {
       state = state.copyWith(isLoadingZones: false, error: e.toString());
     }
@@ -278,19 +306,20 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
       );
       final officeName = Uri.encodeComponent(zone.name);
 
-      final res = await _api.get<List<dynamic>>(
-        '/camera/$officeName',
-      );
+      final res = await _api.get<List<dynamic>>('/camera/$officeName');
 
       final cameras = (res.data ?? [])
           .whereType<Map<String, dynamic>>()
-          .map((item) => ExportCamera(
-                id: (item['id'] as num).toInt(),
-                name: item['cameraLocation']?.toString() ??
-                    item['cameraID']?.toString() ??
-                    'Camera ${item['id']}',
-                zoneId: zoneId,
-              ))
+          .map(
+            (item) => ExportCamera(
+              id: (item['id'] as num).toInt(),
+              name:
+                  item['cameraLocation']?.toString() ??
+                  item['cameraID']?.toString() ??
+                  'Camera ${item['id']}',
+              zoneId: zoneId,
+            ),
+          )
           .toList();
 
       state = state.copyWith(isLoadingCameras: false, cameras: cameras);
@@ -353,23 +382,37 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
   }
 
   Future<void> applyAndExport(BuildContext context) async {
-    if (state.selectedTimeRange == 'Select All Time Range' || state.startDate == null || state.endDate == null) {
+    if (state.selectedTimeRange == 'Select All Time Range' ||
+        state.startDate == null ||
+        state.endDate == null) {
       if (context.mounted) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 24,
+                ),
                 SizedBox(width: 8),
                 Text('Time Range Required'),
               ],
             ),
-            content: const Text('Please select a valid Time Range before applying filters to export.'),
+            content: const Text(
+              'Please select a valid Time Range before applying filters to export.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('OK', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'OK',
+                  style: TextStyle(
+                    color: Color(0xFF0D9488),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -382,13 +425,19 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
     try {
       final params = <String, dynamic>{};
       if (state.selectedDistrictId != null) {
-        final dist = state.districts.firstWhere((d) => d.id == state.selectedDistrictId, orElse: () => ExportDistrict(id: 0, name: '', code: ''));
+        final dist = state.districts.firstWhere(
+          (d) => d.id == state.selectedDistrictId,
+          orElse: () => ExportDistrict(id: 0, name: '', code: ''),
+        );
         if (dist.name.isNotEmpty) {
           params['districtName'] = dist.name;
         }
       }
       if (state.selectedZoneId != null) {
-        final zone = state.zones.firstWhere((z) => z.id == state.selectedZoneId, orElse: () => ExportZone(id: 0, name: ''));
+        final zone = state.zones.firstWhere(
+          (z) => z.id == state.selectedZoneId,
+          orElse: () => ExportZone(id: 0, name: ''),
+        );
         if (zone.name.isNotEmpty) {
           params['zoneName'] = zone.name;
         }
@@ -397,10 +446,14 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
         params['cameraId'] = state.selectedCameraId;
       }
       if (state.startDate != null) {
-        params['startDate'] = DateFormat("yyyy-MM-dd'T'HH:mm").format(state.startDate!);
+        params['startDate'] = DateFormat(
+          "yyyy-MM-dd'T'HH:mm",
+        ).format(state.startDate!);
       }
       if (state.endDate != null) {
-        params['endDate'] = DateFormat("yyyy-MM-dd'T'HH:mm").format(state.endDate!);
+        params['endDate'] = DateFormat(
+          "yyyy-MM-dd'T'HH:mm",
+        ).format(state.endDate!);
       }
       if (state.selectedVehicleType != 'Select All Vehicle Type') {
         params['vehicleType'] = state.selectedVehicleType;
@@ -419,18 +472,16 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
         throw Exception('Export response was empty.');
       }
 
-      final bytes = res.data as List<int>;
-      final b64String = base64Encode(bytes);
+      final bytes = Uint8List.fromList(res.data as List<int>);
 
-      state = state.copyWith(
-        isExporting: false,
-        exportResult: b64String,
-      );
+      state = state.copyWith(isExporting: false, exportResult: bytes);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Filter applied. Vehicle ANPR records exported successfully.'),
+            content: Text(
+              'Filter applied. Vehicle ANPR records exported successfully.',
+            ),
             backgroundColor: Color(0xFF0F5D55),
           ),
         );
@@ -445,10 +496,10 @@ class VehicleExportNotifier extends StateNotifier<VehicleExportState> {
 
 final vehicleExportProvider =
     StateNotifierProvider<VehicleExportNotifier, VehicleExportState>((ref) {
-  final storage = SecureStorageService();
-  final api = ApiClient(storage);
-  return VehicleExportNotifier(api);
-});
+      final storage = SecureStorageService();
+      final api = ApiClient(storage);
+      return VehicleExportNotifier(api);
+    });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -462,6 +513,7 @@ class VehicleExportScreen extends ConsumerStatefulWidget {
 
 class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
   bool _showFilters = false;
+  int _selectedTab = 0;
   static const _teal = Color(0xFF0D9488);
   static const _tealLight = Color(0xFF13A89E);
 
@@ -469,6 +521,8 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(vehicleExportProvider);
     final notifier = ref.read(vehicleExportProvider.notifier);
+    final challanState = ref.watch(challanExportProvider);
+    final challanNotifier = ref.read(challanExportProvider.notifier);
     final isMobile = MediaQuery.of(context).size.width < 700;
 
     return Scaffold(
@@ -480,366 +534,897 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.all(isMobile ? 12 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header Card ──────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(isMobile ? 16 : 24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const PageHeaderBanner(
-                    title: 'Vehicle ANPR Export',
-                    subtitle: 'Export & Download Vehicle Monitoring Records',
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Select filters and download a single Excel file.',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF718096)),
-                  ),
-                  const SizedBox(height: 8),
-                  RichText(
-                    text: const TextSpan(
-                      style: TextStyle(fontSize: 12),
-                      children: [
-                        TextSpan(
-                          text: 'Note: ',
-                          style: TextStyle(
-                            color: Color(0xFF1A202C),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        TextSpan(
-                          text:
-                              'The system allows a maximum of 20,000 records for export.',
-                          style: TextStyle(
-                            color: _tealLight,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Filter Bar ───────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 12 : 20,
-                vertical: isMobile ? 14 : 16,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Export Filter Options',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A202C)),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => setState(() => _showFilters = !_showFilters),
-                        icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt, size: 16, color: _teal),
-                        label: Text(_showFilters ? 'Hide Filter' : 'Filter', style: const TextStyle(color: _teal, fontWeight: FontWeight.bold, fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: _teal),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_showFilters) ...[
-                    const SizedBox(height: 14),
-                    Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _DropdownFilter(
-                                icon: Icons.location_on_outlined,
-                                allLabel: 'Select All District',
-                                items: state.districts.map((d) => _FilterItem(id: d.id, label: d.name)).toList(),
-                                value: state.selectedDistrictId,
-                                isLoading: state.isLoadingDistricts,
-                                onChanged: (id) => notifier.selectDistrict(id),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _DropdownFilter(
-                                icon: Icons.account_tree_outlined,
-                                allLabel: 'Select All Zone',
-                                items: state.zones.map((z) => _FilterItem(id: z.id, label: z.name)).toList(),
-                                value: state.selectedZoneId,
-                                isLoading: state.isLoadingZones,
-                                enabled: state.selectedDistrictId != null || state.zones.isNotEmpty,
-                                onChanged: (id) => notifier.selectZone(id),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _DropdownFilter(
-                                icon: Icons.videocam_outlined,
-                                allLabel: 'Select All Camera',
-                                items: _filteredCameras(state).map((c) => _FilterItem(id: c.id, label: c.name)).toList(),
-                                value: state.selectedCameraId,
-                                isLoading: state.isLoadingCameras,
-                                enabled: state.selectedDistrictId != null || state.cameras.isNotEmpty,
-                                onChanged: (id) => notifier.selectCamera(id),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _StringDropdownFilter(
-                                icon: Icons.calendar_month_outlined,
-                                items: _buildTimeRangeOptions(state),
-                                value: state.selectedTimeRange == 'Custom' && state.startDate != null && state.endDate != null
-                                    ? 'Custom (${DateFormat('dd/MM/yyyy').format(state.startDate!)} – ${DateFormat('dd/MM/yyyy').format(state.endDate!)})'
-                                    : state.selectedTimeRange,
-                                onChanged: (val) => _onTimeRangeChanged(val, notifier),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _StringDropdownFilter(
-                                icon: Icons.directions_car_outlined,
-                                items: const [
-                                  'Select All Vehicle Type',
-                                  'Non-transport',
-                                  'Transport'
-                                ],
-                                value: state.selectedVehicleType,
-                                onChanged: (val) => notifier.setVehicleType(val ?? 'Select All Vehicle Type'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _StringDropdownFilter(
-                                icon: Icons.warning_amber_outlined,
-                                items: [
-                                  'Select All Violation Type',
-                                  ...state.offenceTypes,
-                                ],
-                                value: state.selectedViolationType,
-                                onChanged: (val) => notifier.setViolationType(val ?? 'Select All Violation Type'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _ApplyButton(
-                          isLoading: state.isExporting,
-                          onPressed: () => notifier.applyAndExport(context),
-                          fullWidth: true,
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // ── Error Banner ─────────────────────────────────────────
-            if (state.error != null) ...[
-              const SizedBox(height: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header Card ──────────────────────────────────────────
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline,
-                        color: Colors.red.shade700, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        state.error!,
-                        style: TextStyle(
-                            color: Colors.red.shade700, fontSize: 13),
-                      ),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
                   ],
-                ),
-              ),
-            ],
-
-            // ── Export Result Banner ─────────────────────────────────
-            if (state.exportResult != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F4F3),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF13A89E)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.check_circle_outline,
-                            color: _teal, size: 20),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Export Successful',
+                    const PageHeaderBanner(
+                      title: 'Vehicle ANPR Export',
+                      subtitle: 'Export & Download Vehicle Monitoring Records',
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Select filters and download a single Excel file.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF718096)),
+                    ),
+                    const SizedBox(height: 8),
+                    RichText(
+                      text: const TextSpan(
+                        style: TextStyle(fontSize: 12),
+                        children: [
+                          TextSpan(
+                            text: 'Note: ',
                             style: TextStyle(
-                              color: _teal,
-                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A202C),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          TextSpan(
+                            text:
+                                'The system allows a maximum of 20,000 records for export.',
+                            style: TextStyle(
+                              color: _tealLight,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Center(
+                child: SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, label: Text('Vehicle Data')),
+                    ButtonSegment(value: 1, label: Text('Challan Data')),
+                  ],
+                  selected: {_selectedTab},
+                  onSelectionChanged: (selection) {
+                    setState(() => _selectedTab = selection.first);
+                  },
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0D615B),
+                    selectedForegroundColor: Colors.white,
+                    selectedBackgroundColor: _teal,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Filter Bar ───────────────────────────────────────────
+              if (_selectedTab == 0) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 12 : 20,
+                    vertical: isMobile ? 14 : 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Export Filter Options',
+                            style: TextStyle(
                               fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A202C),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                setState(() => _showFilters = !_showFilters),
+                            icon: Icon(
+                              _showFilters
+                                  ? Icons.filter_alt_off
+                                  : Icons.filter_alt,
+                              size: 16,
+                              color: _teal,
+                            ),
+                            label: Text(
+                              _showFilters ? 'Hide Filter' : 'Filter',
+                              style: const TextStyle(
+                                color: _teal,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: _teal),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_showFilters) ...[
+                        const SizedBox(height: 14),
+                        Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _DropdownFilter(
+                                    icon: Icons.location_on_outlined,
+                                    allLabel: 'Select All District',
+                                    items: state.districts
+                                        .map(
+                                          (d) => _FilterItem(
+                                            id: d.id,
+                                            label: d.name,
+                                          ),
+                                        )
+                                        .toList(),
+                                    value: state.selectedDistrictId,
+                                    isLoading: state.isLoadingDistricts,
+                                    onChanged: (id) =>
+                                        notifier.selectDistrict(id),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _DropdownFilter(
+                                    icon: Icons.account_tree_outlined,
+                                    allLabel: 'Select All Zone',
+                                    items: state.zones
+                                        .map(
+                                          (z) => _FilterItem(
+                                            id: z.id,
+                                            label: z.name,
+                                          ),
+                                        )
+                                        .toList(),
+                                    value: state.selectedZoneId,
+                                    isLoading: state.isLoadingZones,
+                                    enabled:
+                                        state.selectedDistrictId != null ||
+                                        state.zones.isNotEmpty,
+                                    onChanged: (id) => notifier.selectZone(id),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _DropdownFilter(
+                                    icon: Icons.videocam_outlined,
+                                    allLabel: 'Select All Camera',
+                                    items: _filteredCameras(state)
+                                        .map(
+                                          (c) => _FilterItem(
+                                            id: c.id,
+                                            label: c.name,
+                                          ),
+                                        )
+                                        .toList(),
+                                    value: state.selectedCameraId,
+                                    isLoading: state.isLoadingCameras,
+                                    enabled:
+                                        state.selectedDistrictId != null ||
+                                        state.cameras.isNotEmpty,
+                                    onChanged: (id) =>
+                                        notifier.selectCamera(id),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _StringDropdownFilter(
+                                    icon: Icons.calendar_month_outlined,
+                                    items: _buildTimeRangeOptions(state),
+                                    value:
+                                        state.selectedTimeRange == 'Custom' &&
+                                            state.startDate != null &&
+                                            state.endDate != null
+                                        ? 'Custom (${DateFormat('dd/MM/yyyy').format(state.startDate!)} – ${DateFormat('dd/MM/yyyy').format(state.endDate!)})'
+                                        : state.selectedTimeRange,
+                                    onChanged: (val) =>
+                                        _onTimeRangeChanged(val, notifier),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StringDropdownFilter(
+                                    icon: Icons.directions_car_outlined,
+                                    items: const [
+                                      'Select All Vehicle Type',
+                                      'Non-transport',
+                                      'Transport',
+                                    ],
+                                    value: state.selectedVehicleType,
+                                    onChanged: (val) => notifier.setVehicleType(
+                                      val ?? 'Select All Vehicle Type',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _StringDropdownFilter(
+                                    icon: Icons.warning_amber_outlined,
+                                    items: [
+                                      'Select All Violation Type',
+                                      ...state.offenceTypes,
+                                    ],
+                                    value: state.selectedViolationType,
+                                    onChanged: (val) =>
+                                        notifier.setViolationType(
+                                          val ?? 'Select All Violation Type',
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _ApplyButton(
+                              isLoading: state.isExporting,
+                              onPressed: () => notifier.applyAndExport(context),
+                              fullWidth: true,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // ── Error Banner ─────────────────────────────────────────
+                if (state.error != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red.shade700,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontSize: 13,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Export completed successfully. You can download the generated Excel file below.',
-                      style: TextStyle(color: Color(0xFF2C7A7B), fontSize: 13),
+                  ),
+                ],
+
+                // ── Export Result Banner ─────────────────────────────────
+                if (state.exportResult != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F4F3),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF13A89E)),
                     ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          final exportData = state.exportResult;
-                          if (exportData != null) {
-                            PdfHelper.displayOrDownloadPdf(exportData, 'vehicle_export.xlsx');
-                          }
-                        },
-                        icon: const Icon(Icons.download, size: 16, color: Colors.white),
-                        label: const Text(
-                          'Download Excel File',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              color: _teal,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Export Successful',
+                                style: TextStyle(
+                                  color: _teal,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Export completed successfully. You can download the generated Excel file below.',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2C7A7B),
                             fontSize: 13,
                           ),
                         ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF0D9488),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              final exportData = state.exportResult;
+                              if (exportData != null) {
+                                _saveVehicleExport(exportData);
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.download,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              'Download Excel File',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF0D9488),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 32),
+
+                // ── Empty State Illustration ─────────────────────────────
+                if (state.exportResult == null && !state.isExporting)
+                  Center(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 48),
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F4F3),
+                            borderRadius: BorderRadius.circular(40),
+                          ),
+                          child: const Icon(
+                            Icons.file_download_outlined,
+                            size: 40,
+                            color: _tealLight,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Set filters above and click Apply Filters to export',
+                          style: TextStyle(
+                            color: Color(0xFF718096),
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Your Excel file will be generated and ready for download.',
+                          style: TextStyle(
+                            color: Color(0xFFA0AEC0),
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (state.isExporting)
+                  const Center(
+                    child: Column(
+                      children: [
+                        SizedBox(height: 64),
+                        CircularProgressIndicator(color: _teal),
+                        SizedBox(height: 16),
+                        Text(
+                          'Generating your Excel export...',
+                          style: TextStyle(color: _teal, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              if (_selectedTab == 1) ...[
+                _buildChallanExportPanel(
+                  context,
+                  state,
+                  notifier,
+                  challanState,
+                  challanNotifier,
+                  isMobile,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveVehicleExport(Uint8List bytes) async {
+    try {
+      await FileDownloadService.saveBytes(
+        bytes,
+        'vehicle_export.xlsx',
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vehicle Excel downloaded successfully.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to save Excel file: $error')),
+        );
+      }
+    }
+  }
+
+  Widget _buildChallanExportPanel(
+    BuildContext context,
+    VehicleExportState vehicleState,
+    VehicleExportNotifier vehicleNotifier,
+    ChallanExportState challanState,
+    ChallanExportNotifier challanNotifier,
+    bool isMobile,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(isMobile ? 16 : 22),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Challan Data Export',
+                style: TextStyle(
+                  color: Color(0xFF1A202C),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Select Challan Type from filters and export challan records.',
+                style: TextStyle(color: Color(0xFF718096), fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 620;
+                  final districtZoneRow = Row(
+                    children: [
+                      Expanded(
+                        child: _DropdownFilter(
+                          icon: Icons.location_on_outlined,
+                          allLabel: 'Select All District',
+                          items: vehicleState.districts
+                              .map(
+                                (item) =>
+                                    _FilterItem(id: item.id, label: item.name),
+                              )
+                              .toList(),
+                          value: vehicleState.selectedDistrictId,
+                          isLoading: vehicleState.isLoadingDistricts,
+                          onChanged: (id) {
+                            challanNotifier.invalidateCount();
+                            vehicleNotifier.selectDistrict(id);
+                          },
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DropdownFilter(
+                          icon: Icons.account_tree_outlined,
+                          allLabel: 'Select All Zone',
+                          items: vehicleState.zones
+                              .map(
+                                (item) =>
+                                    _FilterItem(id: item.id, label: item.name),
+                              )
+                              .toList(),
+                          value: vehicleState.selectedZoneId,
+                          isLoading: vehicleState.isLoadingZones,
+                          enabled:
+                              vehicleState.selectedDistrictId != null ||
+                              vehicleState.zones.isNotEmpty,
+                          onChanged: (id) {
+                            challanNotifier.invalidateCount();
+                            vehicleNotifier.selectZone(id);
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                  final cameraTimeRow = Row(
+                    children: [
+                      Expanded(
+                        child: _DropdownFilter(
+                          icon: Icons.videocam_outlined,
+                          allLabel: 'Select All Camera',
+                          items: _filteredCameras(vehicleState)
+                              .map(
+                                (item) =>
+                                    _FilterItem(id: item.id, label: item.name),
+                              )
+                              .toList(),
+                          value: vehicleState.selectedCameraId,
+                          isLoading: vehicleState.isLoadingCameras,
+                          enabled:
+                              vehicleState.selectedDistrictId != null ||
+                              vehicleState.cameras.isNotEmpty,
+                          onChanged: (id) {
+                            challanNotifier.invalidateCount();
+                            vehicleNotifier.selectCamera(id);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _StringDropdownFilter(
+                          icon: Icons.calendar_month_outlined,
+                          items: _buildTimeRangeOptions(vehicleState),
+                          value:
+                              vehicleState.selectedTimeRange == 'Custom' &&
+                                  vehicleState.startDate != null &&
+                                  vehicleState.endDate != null
+                              ? 'Custom (${DateFormat('dd/MM/yyyy').format(vehicleState.startDate!)} – ${DateFormat('dd/MM/yyyy').format(vehicleState.endDate!)})'
+                              : vehicleState.selectedTimeRange,
+                          onChanged: (value) => _onTimeRangeChanged(
+                            value,
+                            vehicleNotifier,
+                            challanNotifier,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                  final vehicleViolationRow = Row(
+                    children: [
+                      Expanded(
+                        child: _StringDropdownFilter(
+                          icon: Icons.directions_car_outlined,
+                          items: const [
+                            'Select All Vehicle Type',
+                            'Non-transport',
+                            'Transport',
+                          ],
+                          value: vehicleState.selectedVehicleType,
+                          onChanged: (value) {
+                            challanNotifier.invalidateCount();
+                            vehicleNotifier.setVehicleType(
+                              value ?? 'Select All Vehicle Type',
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _StringDropdownFilter(
+                          icon: Icons.warning_amber_outlined,
+                          items: [
+                            'Select All Violation Type',
+                            ...vehicleState.offenceTypes,
+                          ],
+                          value: vehicleState.selectedViolationType,
+                          onChanged: (value) {
+                            challanNotifier.invalidateCount();
+                            vehicleNotifier.setViolationType(
+                              value ?? 'Select All Violation Type',
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                  final challanTypeFilter = _StringDropdownFilter(
+                    icon: Icons.receipt_long_outlined,
+                    items: const [
+                      'All Challan Data',
+                      'e-Challan',
+                      'Manual Challan',
+                    ],
+                    value: challanState.selectedChallanType,
+                    onChanged: (value) {
+                      if (value != null) challanNotifier.setChallanType(value);
+                    },
+                  );
+
+                  final rows = [
+                    districtZoneRow,
+                    cameraTimeRow,
+                    vehicleViolationRow,
+                    if (isNarrow) challanTypeFilter,
+                  ];
+                  return Column(
+                    children: [
+                      for (var index = 0; index < rows.length; index++) ...[
+                        if (index > 0) const SizedBox(height: 12),
+                        rows[index],
+                      ],
+                      if (!isNarrow) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: (constraints.maxWidth - 12) / 2,
+                              child: challanTypeFilter,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              _ApplyButton(
+                isLoading: challanState.isLoading,
+                fullWidth: true,
+                loadingLabel: 'Loading count...',
+                onPressed: () async {
+                  await challanNotifier.applyFilters(
+                    _buildChallanCountRequest(vehicleState, challanState),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        if (challanState.error != null) ...[
+          const SizedBox(height: 12),
+          _ExportErrorBanner(message: challanState.error!),
+        ],
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(isMobile ? 16 : 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFD8E6E5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'All Challan Data',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Max 2,000 Records',
+                style: TextStyle(color: Color(0xFF718096), fontSize: 13),
+              ),
+              if (challanState.isLoading) ...[
+                const SizedBox(height: 12),
+                const Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
+                    SizedBox(width: 10),
+                    Text('Checking matching records...'),
                   ],
+                ),
+              ] else if (challanState.hasCountResult) ...[
+                const SizedBox(height: 8),
+                Text(
+                  challanState.totalRecords == 0
+                      ? 'No Matching Records'
+                      : '${challanState.totalRecords} Matching '
+                            'Record${challanState.totalRecords == 1 ? '' : 's'}',
+                  style: TextStyle(
+                    color: challanState.totalRecords == 0
+                        ? const Color(0xFF718096)
+                        : const Color(0xFF0F5D55),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed:
+                      !challanState.canDownload || challanState.isDownloading
+                      ? null
+                      : () async {
+                          final success = await challanNotifier.downloadExcel(
+                            _buildChallanRequest(vehicleState, challanState),
+                          );
+                          if (success && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Challan Excel downloaded successfully.',
+                                ),
+                                backgroundColor: Color(0xFF0F5D55),
+                              ),
+                            );
+                          }
+                        },
+                  icon: challanState.isDownloading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.download, size: 18),
+                  label: Text(
+                    challanState.isDownloading
+                        ? 'Downloading...'
+                        : 'Download Excel',
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D9488),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
                 ),
               ),
             ],
-
-            const SizedBox(height: 32),
-
-            // ── Empty State Illustration ─────────────────────────────
-            if (state.exportResult == null && !state.isExporting)
-              Center(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 48),
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8F4F3),
-                        borderRadius: BorderRadius.circular(40),
-                      ),
-                      child: const Icon(
-                        Icons.file_download_outlined,
-                        size: 40,
-                        color: _tealLight,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Set filters above and click Apply Filters to export',
-                      style: TextStyle(
-                        color: Color(0xFF718096),
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Your Excel file will be generated and ready for download.',
-                      style: TextStyle(
-                        color: Color(0xFFA0AEC0),
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-
-            if (state.isExporting)
-              const Center(
-                child: Column(
-                  children: [
-                    SizedBox(height: 64),
-                    CircularProgressIndicator(color: _teal),
-                    SizedBox(height: 16),
-                    Text(
-                      'Generating your Excel export...',
-                      style: TextStyle(color: _teal, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-          ],
+          ),
         ),
-      ),
-    ),
-  );
+      ],
+    );
   }
 
+  ChallanExportRequestModel _buildChallanRequest(
+    VehicleExportState vehicleState,
+    ChallanExportState challanState,
+  ) {
+    final dateFormat = DateFormat("yyyy-MM-dd'T'HH:mm");
+    return ChallanExportRequestModel(
+      startDate: vehicleState.startDate == null
+          ? ''
+          : dateFormat.format(vehicleState.startDate!),
+      endDate: vehicleState.endDate == null
+          ? ''
+          : dateFormat.format(vehicleState.endDate!),
+      categoryTitle: challanState.selectedChallanType,
+      challanTypes: _challanTypesFor(challanState.selectedChallanType),
+    );
+  }
 
+  ChallanCountRequestModel _buildChallanCountRequest(
+    VehicleExportState vehicleState,
+    ChallanExportState challanState,
+  ) {
+    final dateFormat = DateFormat("yyyy-MM-dd'T'HH:mm:ss");
+    final district = vehicleState.districts
+        .where((item) => item.id == vehicleState.selectedDistrictId)
+        .firstOrNull;
+    final zone = vehicleState.zones
+        .where((item) => item.id == vehicleState.selectedZoneId)
+        .firstOrNull;
+    final endDate = vehicleState.endDate;
+    final countEndDate =
+        const {
+              'Today',
+              'Yesterday',
+              'Custom',
+            }.contains(vehicleState.selectedTimeRange) &&
+            endDate != null
+        ? DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59)
+        : endDate;
+
+    return ChallanCountRequestModel(
+      startDate: vehicleState.startDate == null
+          ? null
+          : dateFormat.format(vehicleState.startDate!),
+      endDate: countEndDate == null ? null : dateFormat.format(countEndDate),
+      districtName: district?.name,
+      zoneName: zone?.name,
+      cameraId: vehicleState.selectedCameraId,
+      vehicleCategory: switch (vehicleState.selectedVehicleType) {
+        'Non-transport' => 'N',
+        'Transport' => 'T',
+        _ => null,
+      },
+      violationType:
+          vehicleState.selectedViolationType == 'Select All Violation Type'
+          ? null
+          : vehicleState.selectedViolationType,
+      categoryTitle: challanState.selectedChallanType,
+      challanTypes: _challanTypesFor(challanState.selectedChallanType),
+    );
+  }
+
+  List<String> _challanTypesFor(String categoryTitle) =>
+      switch (categoryTitle) {
+        'e-Challan' => const ['RAISE', 'ECHALLAN', 'E_CHALLAN'],
+        'Manual Challan' => const ['COLLECT', 'SEIZE', 'MANUAL'],
+        _ => const [
+          'RAISE',
+          'COLLECT',
+          'SEIZE',
+          'MANUAL',
+          'ECHALLAN',
+          'E_CHALLAN',
+        ],
+      };
 
   List<ExportCamera> _filteredCameras(VehicleExportState state) {
     if (state.selectedZoneId == null) return state.cameras;
@@ -849,16 +1434,32 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
   }
 
   List<String> _buildTimeRangeOptions(VehicleExportState state) {
-    final base = ['Select All Time Range', 'Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days'];
-    if (state.selectedTimeRange == 'Custom' && state.startDate != null && state.endDate != null) {
+    final base = [
+      'Select All Time Range',
+      'Today',
+      'Yesterday',
+      'Last 7 Days',
+      'Last 30 Days',
+    ];
+    if (state.selectedTimeRange == 'Custom' &&
+        state.startDate != null &&
+        state.endDate != null) {
       final fmt = DateFormat('dd/MM/yyyy');
-      return [...base, 'Custom (${fmt.format(state.startDate!)} – ${fmt.format(state.endDate!)})'];
+      return [
+        ...base,
+        'Custom (${fmt.format(state.startDate!)} – ${fmt.format(state.endDate!)})',
+      ];
     }
     return [...base, 'Custom'];
   }
 
-  void _onTimeRangeChanged(String? val, VehicleExportNotifier notifier) {
+  void _onTimeRangeChanged(
+    String? val,
+    VehicleExportNotifier notifier, [
+    ChallanExportNotifier? challanNotifier,
+  ]) {
     if (val == null) return;
+    challanNotifier?.invalidateCount();
     if (val.startsWith('Custom')) {
       _pickCustomDateRange(context, notifier);
     } else {
@@ -866,7 +1467,10 @@ class _VehicleExportScreenState extends ConsumerState<VehicleExportScreen> {
     }
   }
 
-  Future<void> _pickCustomDateRange(BuildContext context, VehicleExportNotifier notifier) async {
+  Future<void> _pickCustomDateRange(
+    BuildContext context,
+    VehicleExportNotifier notifier,
+  ) async {
     final now = DateTime.now();
     final picked = await showDateRangePicker(
       context: context,
@@ -967,8 +1571,11 @@ class _DropdownFilter extends StatelessWidget {
                     ),
                   ],
                 ),
-                icon: const Icon(Icons.keyboard_arrow_down,
-                    size: 18, color: Color(0xFF718096)),
+                icon: const Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 18,
+                  color: Color(0xFF718096),
+                ),
                 items: [
                   DropdownMenuItem<int?>(
                     value: null,
@@ -980,7 +1587,9 @@ class _DropdownFilter extends StatelessWidget {
                           child: Text(
                             allLabel,
                             style: const TextStyle(
-                                fontSize: 12, color: Color(0xFF4A5568)),
+                              fontSize: 12,
+                              color: Color(0xFF4A5568),
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -993,7 +1602,9 @@ class _DropdownFilter extends StatelessWidget {
                       child: Text(
                         item.label,
                         style: const TextStyle(
-                            fontSize: 12, color: Color(0xFF1A202C)),
+                          fontSize: 12,
+                          color: Color(0xFF1A202C),
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1037,12 +1648,20 @@ class _StringDropdownFilter extends StatelessWidget {
           value: value,
           isExpanded: true,
           isDense: true,
-          icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: Color(0xFF718096)),
+          icon: const Icon(
+            Icons.keyboard_arrow_down,
+            size: 18,
+            color: Color(0xFF718096),
+          ),
           selectedItemBuilder: (BuildContext context) {
             return items.map<Widget>((item) {
               String label = item;
-              if (item == 'Select All Vehicle Type') label = 'Select Vehicle Type';
-              if (item == 'Select All Violation Type') label = 'Select Violation Type';
+              if (item == 'Select All Vehicle Type') {
+                label = 'Select Vehicle Type';
+              }
+              if (item == 'Select All Violation Type') {
+                label = 'Select Violation Type';
+              }
               if (item == 'Select All District') label = 'Select District';
               if (item == 'Select All Zone') label = 'Select Zone';
               if (item == 'Select All Camera') label = 'Select Camera';
@@ -1054,7 +1673,10 @@ class _StringDropdownFilter extends StatelessWidget {
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF4A5568)),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF4A5568),
+                      ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
@@ -1063,33 +1685,38 @@ class _StringDropdownFilter extends StatelessWidget {
               );
             }).toList();
           },
-          items: items.map(
-            (item) {
-              String label = item;
-              if (item == 'Select All Vehicle Type') label = 'Select Vehicle Type';
-              if (item == 'Select All Violation Type') label = 'Select Violation Type';
-              if (item == 'Select All District') label = 'Select District';
-              if (item == 'Select All Zone') label = 'Select Zone';
-              if (item == 'Select All Camera') label = 'Select Camera';
-              if (item == 'Select All Time Range') label = 'Select Time Range';
-              return DropdownMenuItem<String>(
-                value: item,
-                child: Row(
-                  children: [
-                    Icon(icon, size: 15, color: _tealLight),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF4A5568)),
-                        overflow: TextOverflow.ellipsis,
+          items: items.map((item) {
+            String label = item;
+            if (item == 'Select All Vehicle Type') {
+              label = 'Select Vehicle Type';
+            }
+            if (item == 'Select All Violation Type') {
+              label = 'Select Violation Type';
+            }
+            if (item == 'Select All District') label = 'Select District';
+            if (item == 'Select All Zone') label = 'Select Zone';
+            if (item == 'Select All Camera') label = 'Select Camera';
+            if (item == 'Select All Time Range') label = 'Select Time Range';
+            return DropdownMenuItem<String>(
+              value: item,
+              child: Row(
+                children: [
+                  Icon(icon, size: 15, color: _tealLight),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF4A5568),
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
-              );
-            },
-          ).toList(),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
           onChanged: onChanged,
         ),
       ),
@@ -1102,11 +1729,13 @@ class _ApplyButton extends StatelessWidget {
     required this.isLoading,
     required this.onPressed,
     this.fullWidth = false,
+    this.loadingLabel = 'Exporting...',
   });
 
   final bool isLoading;
   final VoidCallback onPressed;
   final bool fullWidth;
+  final String loadingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1123,7 +1752,7 @@ class _ApplyButton extends StatelessWidget {
             )
           : const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
       label: Text(
-        isLoading ? 'Exporting...' : 'Apply Filters',
+        isLoading ? loadingLabel : 'Apply Filters',
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
@@ -1144,5 +1773,36 @@ class _ApplyButton extends StatelessWidget {
       return SizedBox(width: double.infinity, child: btn);
     }
     return btn;
+  }
+}
+
+class _ExportErrorBanner extends StatelessWidget {
+  const _ExportErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

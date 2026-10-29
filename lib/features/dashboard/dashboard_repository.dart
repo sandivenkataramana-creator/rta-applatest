@@ -412,6 +412,11 @@ class DashboardRepository {
     }
 
     try {
+      if (kDebugMode) {
+        debugPrint(
+          'Flutter API payload POST /rta/getChallansGroupCount: $body',
+        );
+      }
       final response = await _apiClient.post<Map<String, dynamic>>(
         '/rta/getChallansGroupCount',
         data: body,

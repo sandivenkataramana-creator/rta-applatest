@@ -1,5 +1,4 @@
 // lib/features/auth/auth_repository_impl.dart
-import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import 'auth_repository.dart';
@@ -22,10 +21,7 @@ class AuthRepositoryImpl implements AuthRepository {
   }) async {
     final response = await _apiClient.post<Map<String, dynamic>>(
       '/auth/login',
-      data: {
-        'username': username,
-        'password': password,
-      },
+      data: {'username': username, 'password': password},
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
