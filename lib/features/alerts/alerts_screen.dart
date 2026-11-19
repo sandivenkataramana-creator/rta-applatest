@@ -126,6 +126,25 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     );
   }
 
+  String _deriveStatus(Map<String, dynamic> vehicle, Map<String, dynamic> item) {
+    final notification = (item['notification'] ?? '').toString().toLowerCase();
+    final remarks = (item['remarks'] ?? '').toString().toLowerCase();
+    final rawStatus = (item['status'] ?? '').toString().trim().toUpperCase();
+
+    if (notification.contains('details not found') ||
+        remarks.contains('details not found') ||
+        rawStatus.contains('DETAILS NOT FOUND') ||
+        rawStatus.isEmpty ||
+        rawStatus == 'PENDING' ||
+        rawStatus == 'NULL' ||
+        rawStatus == 'NA') {
+      return 'DETAILS NOT FOUND';
+    }
+
+    if (vehicle['allClear'] == true) return 'COMPLIANT';
+    return rawStatus;
+  }
+
   void _showDetailsDialog(BuildContext context, Map<String, dynamic> item) {
     final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
     final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'N/A';
@@ -253,6 +272,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                                 _buildDetailRow('District', vehicle['districtName']?.toString() ?? 'N/A'),
                                 _buildDetailRow('Zone', vehicle['zoneName']?.toString() ?? 'N/A'),
                                 _buildDetailRow('Remarks', item['remarks']?.toString() ?? 'N/A'),
+                                _buildDetailRow('Status', _deriveStatus(vehicle, item)),
                               ],
                             ),
                           ),
@@ -426,7 +446,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       PageHeaderBanner(
-                        title: 'Details Not Found Records',
+                        title: 'Details Not Found',
                         subtitle: 'Government of Telangana Transport Department',
                         action: filterButton,
                       ),
@@ -565,6 +585,19 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                                       final item = paginated[index] as Map<String, dynamic>? ?? {};
                                       final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
                                       final cameraName = vehicle['cameraName']?.toString() ?? vehicle['cameraID']?.toString() ?? 'N/A';
+                                      final statusText = _deriveStatus(vehicle, item);
+                                      Color statusBgColor = const Color(0xFFF3E8FF);
+                                      Color statusTextColor = const Color(0xFF7C3AED);
+                                      if (statusText == 'DETAILS NOT FOUND') {
+                                        statusBgColor = const Color(0xFFFEF3C7);
+                                        statusTextColor = const Color(0xFFB45309);
+                                      } else if (statusText == 'COMPLIANT') {
+                                        statusBgColor = const Color(0xFFD1FAE5);
+                                        statusTextColor = const Color(0xFF065F46);
+                                      } else if (statusText == 'NON-COMPLIANT') {
+                                        statusBgColor = const Color(0xFFFFE4E6);
+                                        statusTextColor = const Color(0xFFDC2626);
+                                      }
 
                                       return Container(
                                         color: index % 2 == 0 ? Colors.white : const Color(0xFFF7FAFA),
@@ -635,12 +668,12 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                                                 child: Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFFD1FAE5), // soft green
+                                                    color: statusBgColor,
                                                     borderRadius: BorderRadius.circular(4),
                                                   ),
                                                   child: Text(
-                                                    item['status']?.toString().toUpperCase() ?? 'PENDING',
-                                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
+                                                    statusText,
+                                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusTextColor),
                                                   ),
                                                 ),
                                               ),

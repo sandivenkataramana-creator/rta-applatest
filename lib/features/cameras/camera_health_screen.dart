@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'camera_health_model.dart';
 import 'camera_health_provider.dart';
+import 'camera_locations_dialog.dart';
 
 class CameraHealthScreen extends ConsumerStatefulWidget {
   const CameraHealthScreen({super.key});
@@ -29,7 +30,20 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
       return;
     }
     final parsed = int.tryParse(data?.checkInterval ?? '');
-    _selectedInterval = parsed ?? 15;
+    const validIntervals = [5, 10, 15, 30, 60];
+    if (parsed != null && validIntervals.contains(parsed)) {
+      _selectedInterval = parsed;
+    } else {
+      _selectedInterval = 15;
+    }
+  }
+
+  void _showAllCameraLocationsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => const CameraLocationsDialog(),
+    );
   }
 
   @override
@@ -79,26 +93,99 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 12,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
+                      color: Colors.white.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: Colors.white24),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<int>(
-                        value: _selectedInterval ?? 15,
+                        value: const [5, 10, 15, 30, 60].contains(_selectedInterval)
+                            ? _selectedInterval
+                            : 15,
                         dropdownColor: Colors.white,
-                        style: const TextStyle(color: Colors.white),
+                        borderRadius: BorderRadius.circular(12),
+                        elevation: 4,
+                        style: const TextStyle(
+                          color: Color(0xFF1E293B),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                         iconEnabledColor: Colors.white,
                         isDense: true,
+                        selectedItemBuilder: (BuildContext context) {
+                          return const [5, 10, 15, 30, 60].map<Widget>((int val) {
+                            return Center(
+                              child: Text(
+                                '$val min',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }).toList();
+                        },
                         items: const [
-                          DropdownMenuItem(value: 5, child: Text('5 min')),
-                          DropdownMenuItem(value: 10, child: Text('10 min')),
-                          DropdownMenuItem(value: 15, child: Text('15 min')),
-                          DropdownMenuItem(value: 30, child: Text('30 min')),
-                          DropdownMenuItem(value: 60, child: Text('60 min')),
+                          DropdownMenuItem(
+                            value: 5,
+                            child: Text(
+                              '5 min',
+                              style: TextStyle(
+                                color: Color(0xFF1E293B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 10,
+                            child: Text(
+                              '10 min',
+                              style: TextStyle(
+                                color: Color(0xFF1E293B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 15,
+                            child: Text(
+                              '15 min',
+                              style: TextStyle(
+                                color: Color(0xFF1E293B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 30,
+                            child: Text(
+                              '30 min',
+                              style: TextStyle(
+                                color: Color(0xFF1E293B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 60,
+                            child: Text(
+                              '60 min',
+                              style: TextStyle(
+                                color: Color(0xFF1E293B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
                         ],
                         onChanged: (value) {
                           if (value != null) {
@@ -186,7 +273,7 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
                             }
                           },
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
+                      backgroundColor: const Color.fromARGB(255, 240, 243, 247),
                       foregroundColor: const Color(0xFF0F5D55),
                       minimumSize: const Size(0, 38),
                     ),
@@ -222,9 +309,9 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
                     GridView.count(
                       shrinkWrap: true,
                       crossAxisCount: isCompactPhone ? 2 : (isDesktop ? 4 : 2),
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.05,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: isDesktop ? 2.3 : (width < 360 ? 1.65 : 1.9),
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
                         _MetricCard(
@@ -271,22 +358,69 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          TextField(
-                            decoration: InputDecoration(
-                              hintText: 'Search district, zone or camera',
-                              prefixIcon: const Icon(Icons.search),
-                              filled: true,
-                              fillColor: const Color(0xFFF5F7F8),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    hintText: isCompactPhone
+                                        ? 'Search...'
+                                        : 'Search district, zone or camera',
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      size: 20,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                    prefixIconConstraints:
+                                        const BoxConstraints(
+                                          minWidth: 36,
+                                          minHeight: 36,
+                                        ),
+                                    filled: true,
+                                    fillColor: const Color.fromARGB(255, 233, 234, 235),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                    isDense: true,
+                                  ),
+                                  onChanged: notifier.updateSearch,
+                                ),
                               ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: _showAllCameraLocationsDialog,
+                                icon: const Icon(
+                                  Icons.location_on_outlined,
+                                  size: 17,
+                                ),
+                                label: const Text(
+                                  'Camera Locations',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0F5D55),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 11,
+                                  ),
+                                  minimumSize: const Size(0, 42),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
                               ),
-                            ),
-                            onChanged: notifier.updateSearch,
+                            ],
                           ),
                           const SizedBox(height: 14),
                           if (state.isLoading && state.data != null)
@@ -307,18 +441,8 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
                             Column(
                               children: [
                                 Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Camera Locations',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                    ),
                                     Text(
                                       '${pageItems.length} shown',
                                       style: const TextStyle(
@@ -328,7 +452,7 @@ class _CameraHealthScreenState extends ConsumerState<CameraHealthScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 8),
                                 ...pageItems.map(
                                   (location) => Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
@@ -412,14 +536,14 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 10,
+            color: Color(0x10000000),
+            blurRadius: 8,
             offset: Offset(0, 2),
           ),
         ],
@@ -428,28 +552,45 @@ class _MetricCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ],
       ),

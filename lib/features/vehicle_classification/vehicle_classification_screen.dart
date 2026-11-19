@@ -51,13 +51,65 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
     }
   }
 
-  String _deriveVehicleType(Map<String, dynamic> vehicle) {
-    final cat = vehicle['vehicleCategory']?.toString() ?? '';
-    final vt = vehicle['vehicleType']?.toString() ?? '';
-    if (cat == 'T' || vt.toLowerCase().contains('transport')) return 'TRANSPORT';
-    if (cat == 'NT' || vt.toLowerCase().contains('non')) return 'NON-TRANSPORT';
-    if (vt.toLowerCase().contains('commercial')) return 'COMMERCIAL';
-    if (vehicle['permit'] == false) return 'COMMERCIAL';
+  String _deriveVehicleType(
+    Map<String, dynamic> vehicle, [
+    Map<String, dynamic>? item,
+  ]) {
+    final cat = (vehicle['vehicleCategory'] ??
+            item?['vehicleCategory'] ??
+            vehicle['category'] ??
+            item?['category'] ??
+            '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final vt = (vehicle['vehicleType'] ??
+            item?['vehicleType'] ??
+            vehicle['vehicleClass'] ??
+            item?['vehicleClass'] ??
+            vehicle['type'] ??
+            item?['type'] ??
+            '')
+        .toString()
+        .trim();
+    final vtLower = vt.toLowerCase();
+
+    // 1. Non-Transport check (must precede Transport check because 'non-transport' contains 'transport')
+    if (cat == 'NT' ||
+        cat == 'N' ||
+        cat == 'NON-TRANSPORT' ||
+        cat == 'NON_TRANSPORT' ||
+        cat == 'NON TRANSPORT' ||
+        cat.contains('NON') ||
+        vtLower.contains('non') ||
+        vtLower.contains('motor car') ||
+        vtLower.contains('two wheeler') ||
+        vtLower.contains('motor cycle') ||
+        vtLower.contains('motorcycle') ||
+        vtLower.contains('scooter') ||
+        vtLower.contains('private')) {
+      return 'NON-TRANSPORT';
+    }
+
+    // 2. Transport check
+    if (cat == 'T' ||
+        cat == 'TRANSPORT' ||
+        vtLower.contains('transport')) {
+      return 'TRANSPORT';
+    }
+
+    // 3. Commercial check
+    if (cat == 'C' ||
+        cat == 'COMMERCIAL' ||
+        vtLower.contains('commercial')) {
+      return 'COMMERCIAL';
+    }
+
+    // 4. Fallback: if permit violation exists on an unclassified vehicle, derive from violations
+    if (vehicle['permit'] == false || item?['permit'] == false) {
+      return 'COMMERCIAL';
+    }
+
     return 'NON-TRANSPORT';
   }
 
@@ -1287,15 +1339,22 @@ class _VehicleHistoryScreenState extends ConsumerState<VehicleClassificationScre
                                             itemBuilder: (context, index) {
                                               final item = paginated[index] as Map<String, dynamic>? ?? {};
                                               final vehicle = item['vehicle'] as Map<String, dynamic>? ?? {};
-                                              final typeLabel = _deriveVehicleType(vehicle);
+                                              final typeLabel = _deriveVehicleType(vehicle, item);
                                               final violationText = _deriveViolationText(vehicle, item);
                                               final statusText = _deriveStatus(vehicle, item);
 
-                                              Color typeBadgeBg = const Color(0xFFDBEAFE);
-                                              Color typeBadgeText = const Color(0xFF1E40AF);
-                                              if (typeLabel == 'TRANSPORT') {
+                                              Color typeBadgeBg;
+                                              Color typeBadgeText;
+                                              if (typeLabel == 'COMMERCIAL') {
+                                                typeBadgeBg = const Color(0xFFEDE9FE);
+                                                typeBadgeText = const Color(0xFF6D28D9);
+                                              } else if (typeLabel == 'TRANSPORT') {
                                                 typeBadgeBg = const Color(0xFFDCFCE7);
                                                 typeBadgeText = const Color(0xFF166534);
+                                              } else {
+                                                // NON-TRANSPORT
+                                                typeBadgeBg = const Color(0xFFDBEAFE);
+                                                typeBadgeText = const Color(0xFF1E40AF);
                                               }
 
                                               Color statusColor = const Color(0xFF7C3AED);

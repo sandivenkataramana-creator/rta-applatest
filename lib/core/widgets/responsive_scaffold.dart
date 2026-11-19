@@ -108,6 +108,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     } else {
       mainScaffold = Scaffold(
         appBar: AppBar(
+          toolbarHeight: 64.0,
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -125,61 +126,82 @@ class _AppShellState extends ConsumerState<AppShell> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () => Scaffold.of(context).openDrawer(),
+            builder: (context) => Tooltip(
+              message: 'Toggle Menu',
+              child: InkWell(
+                onTap: () {
+                  final scaffold = Scaffold.of(context);
+                  if (scaffold.isDrawerOpen) {
+                    scaffold.closeDrawer();
+                  } else {
+                    scaffold.openDrawer();
+                  }
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Image.asset(
+                    'assets/images/telangana_logo.png',
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.account_balance,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-          title: Row(
-            children: [
-              Image.asset(
-                'assets/images/telangana_logo.png',
-                height: 36,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.account_balance,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Telangana ANPR Portal',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+          titleSpacing: 0,
+          title: Builder(
+            builder: (context) => InkWell(
+              onTap: () {
+                final scaffold = Scaffold.of(context);
+                if (scaffold.isDrawerOpen) {
+                  scaffold.closeDrawer();
+                } else {
+                  scaffold.openDrawer();
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Telangana ANPR Portal',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18.5,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3,
                     ),
-                    Row(
-                      children: [
-                        const Flexible(
-                          child: Text(
-                            'Vehicle Identification & Enforcement Automation',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Flexible(
+                        child: Text(
+                          'Vehicle Identification & Enforcement Automation',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.verified,
-                          color: Colors.teal.shade200,
-                          size: 10,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.verified,
+                        color: Colors.teal.shade200,
+                        size: 13,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           actions: [
             Builder(
@@ -362,66 +384,89 @@ class _PortalDrawer extends ConsumerWidget {
         ? Container(
             height: 64.0,
             alignment: Alignment.center,
-            child: IconButton(
-              icon: const Icon(Icons.menu, color: Color(0xFF0D9488)),
-              onPressed: () {
-                ref
-                    .read(sidebarCollapsedProvider.notifier)
-                    .update((state) => !state);
-              },
-              tooltip: 'Expand Sidebar',
+            child: Tooltip(
+              message: isDrawer ? 'Close Menu' : 'Expand Sidebar',
+              child: InkWell(
+                onTap: () {
+                  if (isDrawer) {
+                    Navigator.of(context).pop();
+                  } else {
+                    ref
+                        .read(sidebarCollapsedProvider.notifier)
+                        .update((state) => !state);
+                  }
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Image.asset(
+                    'assets/images/telangana_logo.png',
+                    height: 36,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.account_balance,
+                      color: Color(0xFF0F5D55),
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
             ),
           )
         : Container(
             height: 64.0,
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.menu, color: Color(0xFF0D9488)),
-                  onPressed: () {
-                    ref
-                        .read(sidebarCollapsedProvider.notifier)
-                        .update((state) => !state);
-                  },
-                  tooltip: 'Collapse Sidebar',
-                ),
-                const SizedBox(width: 8),
-                Image.asset(
-                  'assets/images/telangana_logo.png',
-                  height: 32,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.account_balance,
-                    color: Color(0xFF0F5D55),
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'TGRTA',
-                      style: TextStyle(
-                        color: Color(0xFF0D9488),
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      'ANPR PORTAL',
-                      style: TextStyle(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: InkWell(
+              onTap: () {
+                if (isDrawer) {
+                  Navigator.of(context).pop();
+                } else {
+                  ref
+                      .read(sidebarCollapsedProvider.notifier)
+                      .update((state) => !state);
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Row(
+                children: [
+                  Tooltip(
+                    message: isDrawer ? 'Close Menu' : 'Collapse Sidebar',
+                    child: Image.asset(
+                      'assets/images/telangana_logo.png',
+                      height: 36,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.account_balance,
                         color: Color(0xFF0F5D55),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.5,
+                        size: 28,
                       ),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'TGRTA',
+                        style: TextStyle(
+                          color: Color(0xFF0D9488),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        'ANPR PORTAL',
+                        style: TextStyle(
+                          color: Color(0xFF0F5D55),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           );
 

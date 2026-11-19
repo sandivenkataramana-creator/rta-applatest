@@ -83,4 +83,13 @@ class MissingCertificateModel {
   /// NOTE: We do NOT sum certificate categories here because a single vehicle
   /// can have multiple missing certificates, which would produce a duplicate count.
   int get vehicleCount => vehicleCountOverride ?? 0;
+
+  /// Returns the missing data count matching the web portal formula:
+  /// (vehicleCount - weightCertificateNotFound).
+  int get missingDataCount {
+    if (vehicleCount > 0 && vehicleCount >= weightCertificateNotFound) {
+      return vehicleCount - weightCertificateNotFound;
+    }
+    return weightCertificateNotFound;
+  }
 }

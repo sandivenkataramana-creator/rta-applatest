@@ -75,11 +75,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.dispose();
   }
 
-  void _refreshDashboardData() {
-    if (!mounted) return;
-    final state = ref.read(dashboardNotifierProvider);
-    final cameraID = state.cameraLocationToId[_selectedCamera];
-    final params = MissingCertificatesParams(
+  MissingCertificatesParams _getCurrentMissingCertificatesParams([DashboardState? state]) {
+    final s = state ?? ref.read(dashboardNotifierProvider);
+    final cameraID = s?.cameraLocationToId[_selectedCamera];
+    return MissingCertificatesParams(
       district: _selectedDistrict,
       zone: _selectedZone,
       camera: cameraID,
@@ -87,6 +86,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       customStartDate: _customStartDate,
       customEndDate: _customEndDate,
     );
+  }
+
+  void _refreshDashboardData() {
+    if (!mounted) return;
+    final state = ref.read(dashboardNotifierProvider);
+    final cameraID = state.cameraLocationToId[_selectedCamera];
+    final params = _getCurrentMissingCertificatesParams(state);
     ref.invalidate(missingCertificatesProvider(params));
 
     // Background fetch dashboard metrics (KPIs, offences, challans)
@@ -175,15 +181,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final summaryColumnCount = isDesktop ? 4 : 2;
     final donutColumnCount = isDesktop ? 6 : (screenWidth >= 750 ? 3 : 1);
 
-    final cameraID = state.cameraLocationToId[_selectedCamera];
-    final params = MissingCertificatesParams(
-      district: _selectedDistrict,
-      zone: _selectedZone,
-      camera: cameraID,
-      timeRange: _selectedTimeRange,
-      customStartDate: _customStartDate,
-      customEndDate: _customEndDate,
-    );
+    final params = _getCurrentMissingCertificatesParams(state);
 
     ref.listen<AsyncValue<MissingCertificateModel>>(
       missingCertificatesProvider(params),
@@ -206,14 +204,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: RefreshIndicator(
           onRefresh: () async {
             final camId = state.cameraLocationToId[_selectedCamera];
-            final p = MissingCertificatesParams(
-              district: _selectedDistrict,
-              zone: _selectedZone,
-              camera: camId,
-              timeRange: _selectedTimeRange,
-              customStartDate: _customStartDate,
-              customEndDate: _customEndDate,
-            );
+            final p = _getCurrentMissingCertificatesParams(state);
             ref.invalidate(missingCertificatesProvider(p));
             await ref.read(missingCertificatesProvider(p).future);
             await notifier.fetchDashboard(
@@ -612,9 +603,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         _ChartData('Road Tax', data.roadTaxCertificateNotFound, const Color(0xFF7A7BF2)),
                                         _ChartData('Permit', data.permitCertificateNotFound, const Color(0xFFD64D81)),
                                         _ChartData('Puc', data.pucCertificateNotFound, const Color(0xFF32353A)),
-                                        _ChartData('Registration', data.registrationCertificateNotFound, const Color(0xFFE8D05C)),
+                                        _ChartData('Registration', data.registrationCertificateNotFound, const Color(0xFF00ACC1)),
                                         _ChartData('All Clear', data.allClearNotFound, const Color(0xFF2FA85C)),
-                                        _ChartData('Missing Data', data.weightCertificateNotFound, const Color(0xFFF5D671)),
+                                        _ChartData('Missing Data', data.missingDataCount, const Color(0xFFF5D671)),
                                       ];
                                       return SfCircularChart(
                                         legend: Legend(
@@ -688,14 +679,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   height: 320,
                                   child: SfCartesianChart(
                                     enableAxisAnimation: false,
-                                    primaryXAxis: CategoryAxis(
+                                    primaryXAxis: const CategoryAxis(
+                                      interval: 1,
                                       labelRotation: 45,
-                                      majorGridLines: const MajorGridLines(width: 0),
+                                      majorGridLines: MajorGridLines(width: 0),
+                                      labelStyle: TextStyle(fontSize: 8.5),
                                     ),
                                     primaryYAxis: NumericAxis(
-                                      title: AxisTitle(
+                                      title: const AxisTitle(
                                         text: 'Revenue (₹)',
-                                        textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                        textStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                                       ),
                                       numberFormat: NumberFormat.compact(),
                                       axisLine: const AxisLine(width: 0),
@@ -708,13 +701,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         xValueMapper: (data, _) => data.label,
                                         yValueMapper: (data, _) => data.value,
                                         pointColorMapper: (data, _) => data.color,
-                                        dataLabelMapper: (data, _) => data.value > 0
-                                            ? '₹${data.value.toStringAsFixed(2)}'
-                                            : '₹0.00',
+                                        dataLabelMapper: (data, _) => _formatRevenueDataLabel(data.value),
                                         dataLabelSettings: const DataLabelSettings(
                                           isVisible: true,
-                                          showZeroValue: true,
+                                          showZeroValue: false,
                                           labelPosition: ChartDataLabelPosition.outside,
+                                          overflowMode: OverflowMode.none,
+                                          labelIntersectAction: LabelIntersectAction.none,
+                                          angle: -45,
                                           textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
                                         ),
                                       ),
@@ -766,9 +760,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                               _ChartData('Road Tax', data.roadTaxCertificateNotFound, const Color(0xFF7A7BF2)),
                                               _ChartData('Permit', data.permitCertificateNotFound, const Color(0xFFD64D81)),
                                               _ChartData('Puc', data.pucCertificateNotFound, const Color(0xFF32353A)),
-                                              _ChartData('Registration', data.registrationCertificateNotFound, const Color(0xFFE8D05C)),
+                                              _ChartData('Registration', data.registrationCertificateNotFound, const Color(0xFF00ACC1)),
                                               _ChartData('All Clear', data.allClearNotFound, const Color(0xFF2FA85C)),
-                                              _ChartData('Missing Data', data.weightCertificateNotFound, const Color(0xFFF5D671)),
+                                              _ChartData('Missing Data', data.missingDataCount, const Color(0xFFF5D671)),
                                             ];
                                             return SfCircularChart(
                                               legend: Legend(
@@ -845,14 +839,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         height: 360,
                                         child: SfCartesianChart(
                                           enableAxisAnimation: false,
-                                          primaryXAxis: CategoryAxis(
+                                          primaryXAxis: const CategoryAxis(
+                                            interval: 1,
                                             labelRotation: 45,
-                                            majorGridLines: const MajorGridLines(width: 0),
+                                            majorGridLines: MajorGridLines(width: 0),
+                                            labelStyle: TextStyle(fontSize: 8.5),
                                           ),
                                           primaryYAxis: NumericAxis(
-                                            title: AxisTitle(
+                                            title: const AxisTitle(
                                               text: 'Revenue (₹)',
-                                              textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                              textStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                                             ),
                                             numberFormat: NumberFormat.compact(),
                                             axisLine: const AxisLine(width: 0),
@@ -865,13 +861,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                               xValueMapper: (data, _) => data.label,
                                               yValueMapper: (data, _) => data.value,
                                               pointColorMapper: (data, _) => data.color,
-                                              dataLabelMapper: (data, _) => data.value > 0
-                                                  ? '₹${data.value.toStringAsFixed(2)}'
-                                                  : '₹0.00',
+                                              dataLabelMapper: (data, _) => _formatRevenueDataLabel(data.value),
                                               dataLabelSettings: const DataLabelSettings(
                                                 isVisible: true,
-                                                showZeroValue: true,
+                                                showZeroValue: false,
                                                 labelPosition: ChartDataLabelPosition.outside,
+                                                overflowMode: OverflowMode.none,
+                                                labelIntersectAction: LabelIntersectAction.none,
+                                                angle: -45,
                                                 textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
                                               ),
                                             ),
@@ -1141,6 +1138,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final val = monthlyRevenue[monthKey] ?? 0.0;
       return _ChartData(m, val, colors[index]);
     });
+  }
+
+  String _formatRevenueDataLabel(num value) {
+    if (value <= 0) return '';
+    if (value >= 10000000) {
+      final cr = value / 10000000;
+      return '₹${cr >= 100 ? cr.toStringAsFixed(1) : cr.toStringAsFixed(2)} Cr';
+    } else if (value >= 100000) {
+      final l = value / 100000;
+      return '₹${l.toStringAsFixed(2)} L';
+    } else if (value >= 1000) {
+      final k = value / 1000;
+      return '₹${k.toStringAsFixed(1)} K';
+    } else {
+      return '₹${value.toStringAsFixed(0)}';
+    }
   }
 
   IconData _getMetricIcon(String title) {
@@ -1814,9 +1827,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             _ChartData('Road Tax', data.roadTaxCertificateNotFound, const Color(0xFF7A7BF2)),
                             _ChartData('Permit', data.permitCertificateNotFound, const Color(0xFFD64D81)),
                             _ChartData('Puc', data.pucCertificateNotFound, const Color(0xFF32353A)),
-                            _ChartData('Registration', data.registrationCertificateNotFound, const Color(0xFFE8D05C)),
+                            _ChartData('Registration', data.registrationCertificateNotFound, const Color(0xFF00ACC1)),
                             _ChartData('All Clear', data.allClearNotFound, const Color(0xFF2FA85C)),
-                            _ChartData('Missing Data', data.weightCertificateNotFound, const Color(0xFFF5D671)),
+                            _ChartData('Missing Data', data.missingDataCount, const Color(0xFFF5D671)),
                           ];
                           return SfCircularChart(
                             margin: EdgeInsets.zero,
@@ -1879,10 +1892,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           _buildDistributionRow('Insurance', data.insuranceCertificateNotFound, const Color(0xFF5CA0F2)),
                           _buildDistributionRow('Road Tax', data.roadTaxCertificateNotFound, const Color(0xFF7A7BF2)),
                           _buildDistributionRow('PUC', data.pucCertificateNotFound, const Color(0xFF32353A)),
-                          _buildDistributionRow('Registration', data.registrationCertificateNotFound, const Color(0xFFE8D05C)),
+                          _buildDistributionRow('Registration', data.registrationCertificateNotFound, const Color(0xFF00ACC1)),
                           _buildDistributionRow('Permit', data.permitCertificateNotFound, const Color(0xFFD64D81)),
                           _buildDistributionRow('Fitness', data.fitnessCertificateNotFound, const Color(0xFFE28B5C)),
-                          _buildDistributionRow('Missing Data', data.weightCertificateNotFound, const Color(0xFFF5D671)),
+                          _buildDistributionRow('Missing Data', data.missingDataCount, const Color(0xFFF5D671)),
                         ];
                         return Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -1930,19 +1943,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _buildDynamicRevenueHeader(state.monthlyRevenue),
                   const SizedBox(height: 16),
                   SizedBox(
-                    height: 220,
+                    height: 250,
                     child: SfCartesianChart(
                       enableAxisAnimation: false,
                       margin: EdgeInsets.zero,
-                      primaryXAxis: CategoryAxis(
-                        labelRotation: 0,
-                        majorGridLines: const MajorGridLines(width: 0),
-                        labelStyle: const TextStyle(fontSize: 8.5),
+                      tooltipBehavior: TooltipBehavior(enable: true),
+                      primaryXAxis: const CategoryAxis(
+                        interval: 1,
+                        labelRotation: 45,
+                        majorGridLines: MajorGridLines(width: 0),
+                        labelStyle: TextStyle(fontSize: 8.5),
                       ),
                       primaryYAxis: NumericAxis(
-                        title: AxisTitle(
+                        title: const AxisTitle(
                           text: 'Revenue (₹)',
-                          textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+                          textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
                         ),
                         numberFormat: NumberFormat.compact(),
                         axisLine: const AxisLine(width: 0),
@@ -1955,13 +1970,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           xValueMapper: (data, _) => data.label,
                           yValueMapper: (data, _) => data.value,
                           pointColorMapper: (data, _) => data.color,
-                          dataLabelMapper: (data, _) => data.value > 0
-                              ? '₹${data.value.toStringAsFixed(1)}'
-                              : '₹0.0',
+                          dataLabelMapper: (data, _) => _formatRevenueDataLabel(data.value),
                           dataLabelSettings: const DataLabelSettings(
                             isVisible: true,
                             showZeroValue: false,
                             labelPosition: ChartDataLabelPosition.outside,
+                            overflowMode: OverflowMode.none,
+                            labelIntersectAction: LabelIntersectAction.none,
+                            angle: -45,
                             textStyle: TextStyle(fontSize: 7.5, fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -2558,23 +2574,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _exportChart(BuildContext context, String title, String format) async {
     if (format == 'fullscreen') {
-      final state = ref.read(dashboardNotifierProvider);
-      final params = MissingCertificatesParams(
-        district: _selectedDistrict,
-        zone: _selectedZone,
-        camera: state.cameraLocationToId[_selectedCamera],
-      );
-      final certificatesAsync = ref.read(missingCertificatesProvider(params));
-      final certificates = certificatesAsync.value;
-
       showDialog(
         context: context,
-        builder: (context) {
+        builder: (dialogContext) {
           return Dialog(
-            insetPadding: const EdgeInsets.all(16),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2596,7 +2603,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         child: IconButton(
                           icon: const Icon(Icons.close, size: 20, color: Colors.white),
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => Navigator.pop(dialogContext),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
@@ -2606,72 +2613,156 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   const Divider(),
                   const SizedBox(height: 16),
                   if (title == 'Vehicle Distribution') ...[
-                    if (certificates != null) ...[
-                      SizedBox(
-                        height: 300,
-                        child: SfCircularChart(
-                          legend: Legend(
-                            isVisible: true,
-                            position: LegendPosition.bottom,
-                            overflowMode: LegendItemOverflowMode.wrap,
-                          ),
-                          series: <DoughnutSeries<_ChartData, String>>[
-                            DoughnutSeries<_ChartData, String>(
-                              dataSource: [
-                                _ChartData('Fitness', certificates.fitnessCertificateNotFound, const Color(0xFFE28B5C)),
-                                _ChartData('Insurance', certificates.insuranceCertificateNotFound, const Color(0xFF5CA0F2)),
-                                _ChartData('Road Tax', certificates.roadTaxCertificateNotFound, const Color(0xFF7A7BF2)),
-                                _ChartData('Permit', certificates.permitCertificateNotFound, const Color(0xFFD64D81)),
-                                _ChartData('Puc', certificates.pucCertificateNotFound, const Color(0xFF32353A)),
-                                _ChartData('Registration', certificates.registrationCertificateNotFound, const Color(0xFFE8D05C)),
-                                _ChartData('All Clear', certificates.allClearNotFound, const Color(0xFF2FA85C)),
-                                _ChartData('Missing Data', certificates.weightCertificateNotFound, const Color(0xFFF5D671)),
-                              ],
-                              xValueMapper: (data, _) => data.label,
-                              yValueMapper: (data, _) => data.value,
-                              pointColorMapper: (data, _) => data.color,
-                              innerRadius: '60%',
-                              radius: '95%',
-                              dataLabelSettings: const DataLabelSettings(
-                                isVisible: true,
-                                labelPosition: ChartDataLabelPosition.outside,
-                                textStyle: TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final params = _getCurrentMissingCertificatesParams();
+                        final certificatesAsync = ref.watch(missingCertificatesProvider(params));
+
+                        return certificatesAsync.when(
+                          data: (certificates) {
+                            return SizedBox(
+                              height: 380,
+                              child: SfCircularChart(
+                                margin: EdgeInsets.zero,
+                                legend: const Legend(
+                                  isVisible: true,
+                                  position: LegendPosition.bottom,
+                                  overflowMode: LegendItemOverflowMode.wrap,
+                                  textStyle: TextStyle(fontSize: 10),
+                                ),
+                                annotations: <CircularChartAnnotation>[
+                                  CircularChartAnnotation(
+                                    widget: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          NumberFormat.decimalPattern().format(certificates.vehicleCount),
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0F3260),
+                                          ),
+                                        ),
+                                        const Text(
+                                          'Total',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.black45,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                series: <DoughnutSeries<_ChartData, String>>[
+                                  DoughnutSeries<_ChartData, String>(
+                                    animationDuration: 0,
+                                    dataSource: [
+                                      _ChartData('Fitness', certificates.fitnessCertificateNotFound, const Color(0xFFE28B5C)),
+                                      _ChartData('Insurance', certificates.insuranceCertificateNotFound, const Color(0xFF5CA0F2)),
+                                      _ChartData('Road Tax', certificates.roadTaxCertificateNotFound, const Color(0xFF7A7BF2)),
+                                      _ChartData('Permit', certificates.permitCertificateNotFound, const Color(0xFFD64D81)),
+                                      _ChartData('Puc', certificates.pucCertificateNotFound, const Color(0xFF32353A)),
+                                      _ChartData('Registration', certificates.registrationCertificateNotFound, const Color(0xFF00ACC1)),
+                                      _ChartData('All Clear', certificates.allClearNotFound, const Color(0xFF2FA85C)),
+                                      _ChartData('Missing Data', certificates.missingDataCount, const Color(0xFFF5D671)),
+                                    ],
+                                    xValueMapper: (data, _) => data.label,
+                                    yValueMapper: (data, _) => data.value,
+                                    pointColorMapper: (data, _) => data.color,
+                                    innerRadius: '50%',
+                                    radius: '56%',
+                                    dataLabelSettings: const DataLabelSettings(
+                                      isVisible: true,
+                                      showZeroValue: false,
+                                      labelPosition: ChartDataLabelPosition.outside,
+                                      overflowMode: OverflowMode.none,
+                                      labelIntersectAction: LabelIntersectAction.shift,
+                                      connectorLineSettings: ConnectorLineSettings(
+                                        type: ConnectorType.curve,
+                                        length: '10%',
+                                      ),
+                                      textStyle: TextStyle(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F3260),
+                                      ),
+                                    ),
+                                    dataLabelMapper: (data, _) {
+                                      final countStr = NumberFormat.decimalPattern().format(data.value.toInt());
+                                      if (data.label == 'Missing Data') {
+                                        return 'Missing: $countStr';
+                                      }
+                                      return '${data.label}: $countStr';
+                                    },
+                                  ),
+                                ],
                               ),
-                              dataLabelMapper: (data, _) => '${data.label}: ${data.value.toInt()}',
+                            );
+                          },
+                          loading: () => const SizedBox(
+                            height: 380,
+                            child: Center(
+                              child: CircularProgressIndicator(color: Color(0xFF0F5D55)),
                             ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      const Center(child: Text('No data loaded')),
-                    ],
+                          ),
+                          error: (err, stack) => SizedBox(
+                            height: 380,
+                            child: Center(
+                              child: Text(
+                                'Error loading chart: $err',
+                                style: const TextStyle(color: Colors.red, fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ] else ...[
                     // Total Revenue Generated
-                    RepaintBoundary(
-                      key: _revenueChartKey,
-                      child: SizedBox(
-                        height: 300,
-                        child: SfCartesianChart(
-                          primaryXAxis: CategoryAxis(majorGridLines: const MajorGridLines(width: 0)),
-                          primaryYAxis: NumericAxis(
-                            numberFormat: NumberFormat.compact(),
-                            axisLine: const AxisLine(width: 0),
-                          ),
-                          series: <ColumnSeries<_ChartData, String>>[
-                            ColumnSeries<_ChartData, String>(
-                              dataSource: _getRevenueData(state.monthlyRevenue),
-                              xValueMapper: (data, _) => data.label,
-                              yValueMapper: (data, _) => data.value,
-                              pointColorMapper: (data, _) => data.color,
-                              dataLabelSettings: const DataLabelSettings(
-                                isVisible: true,
-                                labelPosition: ChartDataLabelPosition.outside,
-                                textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
-                              ),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final state = ref.watch(dashboardNotifierProvider);
+                        return SizedBox(
+                          height: 340,
+                          child: SfCartesianChart(
+                            tooltipBehavior: TooltipBehavior(enable: true),
+                            primaryXAxis: const CategoryAxis(
+                              interval: 1,
+                              labelRotation: 45,
+                              majorGridLines: MajorGridLines(width: 0),
+                              labelStyle: TextStyle(fontSize: 8.5),
                             ),
-                          ],
-                        ),
-                      ),
+                            primaryYAxis: NumericAxis(
+                              title: const AxisTitle(
+                                text: 'Revenue (₹)',
+                                textStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                              numberFormat: NumberFormat.compact(),
+                              axisLine: const AxisLine(width: 0),
+                            ),
+                            series: <ColumnSeries<_ChartData, String>>[
+                              ColumnSeries<_ChartData, String>(
+                                dataSource: _getRevenueData(state.monthlyRevenue),
+                                xValueMapper: (data, _) => data.label,
+                                yValueMapper: (data, _) => data.value,
+                                pointColorMapper: (data, _) => data.color,
+                                dataLabelMapper: (data, _) => _formatRevenueDataLabel(data.value),
+                                dataLabelSettings: const DataLabelSettings(
+                                  isVisible: true,
+                                  showZeroValue: false,
+                                  labelPosition: ChartDataLabelPosition.outside,
+                                  overflowMode: OverflowMode.none,
+                                  labelIntersectAction: LabelIntersectAction.none,
+                                  angle: -45,
+                                  textStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ],

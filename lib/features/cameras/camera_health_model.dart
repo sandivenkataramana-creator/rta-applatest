@@ -105,3 +105,71 @@ class CameraHealthLocation {
     'status': status,
   };
 }
+
+class CameraLocationItem {
+  const CameraLocationItem({
+    this.id,
+    required this.cameraLocation,
+    required this.cameraID,
+    this.districtCode,
+    this.rtaOfficeCode,
+    this.channelName,
+    this.status = false,
+    this.lastSeenTime,
+    this.latitude,
+    this.longitude,
+    this.googleMapLink,
+    this.officeName,
+    this.districtName,
+  });
+
+  factory CameraLocationItem.fromJson(Map<String, dynamic> json) {
+    return CameraLocationItem(
+      id: CameraHealthModel._parseInt(json['id']),
+      cameraLocation: CameraHealthModel._parseString(json['cameraLocation']) ?? '',
+      cameraID: CameraHealthModel._parseString(json['cameraID']) ?? '',
+      districtCode: CameraHealthModel._parseString(json['districtCode']),
+      rtaOfficeCode: CameraHealthModel._parseString(json['rtaOfficeCode']),
+      channelName: CameraHealthModel._parseString(json['channelName']),
+      status: json['status'] is bool
+          ? json['status'] as bool
+          : (json['status']?.toString().toLowerCase() == 'true'),
+      lastSeenTime: CameraHealthModel._parseString(json['lastSeenTime']),
+      latitude: CameraHealthModel._parseString(json['latitude']) ?? '',
+      longitude: CameraHealthModel._parseString(json['longitude']) ?? '',
+      googleMapLink: CameraHealthModel._parseString(json['googleMapLink']),
+      officeName: CameraHealthModel._parseString(json['officeName']),
+      districtName: CameraHealthModel._parseString(json['districtName']) ?? '',
+    );
+  }
+
+  final int? id;
+  final String cameraLocation;
+  final String cameraID;
+  final String? districtCode;
+  final String? rtaOfficeCode;
+  final String? channelName;
+  final bool status;
+  final String? lastSeenTime;
+  final String? latitude;
+  final String? longitude;
+  final String? googleMapLink;
+  final String? officeName;
+  final String? districtName;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'cameraLocation': cameraLocation,
+    'cameraID': cameraID,
+    'districtCode': districtCode,
+    'rtaOfficeCode': rtaOfficeCode,
+    'channelName': channelName,
+    'status': status,
+    'lastSeenTime': lastSeenTime,
+    'latitude': latitude,
+    'longitude': longitude,
+    'googleMapLink': googleMapLink,
+    'officeName': officeName,
+    'districtName': districtName,
+  };
+}

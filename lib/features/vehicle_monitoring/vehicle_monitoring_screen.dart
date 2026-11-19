@@ -408,8 +408,51 @@ class _VehicleMonitoringScreenState
     }
   }
 
-  Widget _buildRemarksRichText(Map<String, dynamic> vehicle) {
-    if (vehicle['allClear'] == true) {
+  String _formatRemarkText(String text) {
+    if (text.isEmpty) return '';
+    final lines = text
+        .split(RegExp(r'[\r\n]+'))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final formattedLines = lines.map((line) {
+      var cleaned = line;
+      cleaned = cleaned.replaceAllMapped(
+        RegExp(r'([a-zA-Z_]+)(missing)', caseSensitive: false),
+        (m) => '${m[1]} Missing',
+      );
+      cleaned = cleaned.replaceAll('_', ' ');
+      cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+      return cleaned;
+    }).toList();
+    return formattedLines.join(', ');
+  }
+
+  Widget _buildRemarksRichText(
+    Map<String, dynamic> vehicle, [
+    Map<String, dynamic>? item,
+  ]) {
+    final rawRemarks = (item?['remarks'] ?? vehicle['remarks'] ?? '')
+        .toString()
+        .trim();
+    final rawNotif = (item?['notification'] ??
+            item?['offence'] ??
+            item?['offenceName'] ??
+            item?['violationType'] ??
+            vehicle['notification'] ??
+            vehicle['offence'] ??
+            '')
+        .toString()
+        .trim();
+
+    final bool isAllClear = vehicle['allClear'] == true ||
+        (item?['allClear'] == true) ||
+        rawRemarks.toLowerCase() == 'all clear' ||
+        rawRemarks.toLowerCase() == 'all_clear' ||
+        rawNotif.toLowerCase() == 'all clear' ||
+        rawNotif.toLowerCase() == 'all_clear';
+
+    if (isAllClear) {
       return const Text(
         'All Clear',
         style: TextStyle(
@@ -419,16 +462,58 @@ class _VehicleMonitoringScreenState
         ),
       );
     }
-    final List<TextSpan> spans = [];
 
-    final String notifStr =
-        (vehicle['notification'] ??
-                vehicle['offence'] ??
-                vehicle['violationType'] ??
-                '')
-            .toString()
-            .toLowerCase();
-    final bool hasExplicitPucNotif = notifStr.contains('puc');
+    if (rawRemarks.toLowerCase().contains('details not found') ||
+        rawNotif.toLowerCase().contains('details not found')) {
+      return const Text(
+        'DETAILS NOT FOUND',
+        style: TextStyle(
+          color: Color(0xFFDC2626),
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+      );
+    }
+
+    // 1. If explicit remarks exist from backend, display them cleanly
+    if (rawRemarks.isNotEmpty &&
+        rawRemarks != 'null' &&
+        rawRemarks != 'N/A' &&
+        rawRemarks.toLowerCase() != 'all clear') {
+      final formattedRemarks = _formatRemarkText(rawRemarks);
+      return Text(
+        formattedRemarks,
+        style: const TextStyle(
+          color: Color(0xFFDC2626),
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    // 2. If notification or offence text exists, display it as remark
+    if (rawNotif.isNotEmpty &&
+        rawNotif != 'null' &&
+        rawNotif != 'N/A' &&
+        rawNotif.toLowerCase() != 'all clear') {
+      final formattedNotif = _formatRemarkText(rawNotif);
+      return Text(
+        formattedNotif,
+        style: const TextStyle(
+          color: Color(0xFFDC2626),
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    // 3. Fallback: check document flags without appending "violation"
+    final List<TextSpan> spans = [];
+    final bool hasExplicitPucNotif = rawNotif.toLowerCase().contains('puc');
     final bool hasOtherViolation =
         vehicle['insurance'] == false ||
         vehicle['roadTax'] == false ||
@@ -440,78 +525,106 @@ class _VehicleMonitoringScreenState
         (hasExplicitPucNotif || !hasOtherViolation)) {
       spans.add(
         const TextSpan(
-          text: 'Puc Missing from RTA ',
-          style: TextStyle(color: Color(0xFF333333)),
+          text: 'Puc Missing from RTA',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
     if (vehicle['insurance'] == false) {
+      if (spans.isNotEmpty) {
+        spans.add(
+          const TextSpan(
+            text: ', ',
+            style: TextStyle(color: Colors.black87),
+          ),
+        );
+      }
       spans.add(
         const TextSpan(
-          text: 'insurance ',
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
-        ),
-      );
-      spans.add(
-        const TextSpan(
-          text: 'violation ',
-          style: TextStyle(color: Color(0xFF333333)),
+          text: 'Insurance Violation',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
     if (vehicle['roadTax'] == false) {
+      if (spans.isNotEmpty) {
+        spans.add(
+          const TextSpan(
+            text: ', ',
+            style: TextStyle(color: Colors.black87),
+          ),
+        );
+      }
       spans.add(
         const TextSpan(
-          text: 'road tax ',
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
-        ),
-      );
-      spans.add(
-        const TextSpan(
-          text: 'violation ',
-          style: TextStyle(color: Color(0xFF333333)),
+          text: 'Road Tax Violation',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
     if (vehicle['permit'] == false) {
+      if (spans.isNotEmpty) {
+        spans.add(
+          const TextSpan(
+            text: ', ',
+            style: TextStyle(color: Colors.black87),
+          ),
+        );
+      }
       spans.add(
         const TextSpan(
-          text: 'permit ',
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
-        ),
-      );
-      spans.add(
-        const TextSpan(
-          text: 'violation ',
-          style: TextStyle(color: Color(0xFF333333)),
+          text: 'Permit Violation',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
     if (vehicle['fitnessCertificate'] == false) {
+      if (spans.isNotEmpty) {
+        spans.add(
+          const TextSpan(
+            text: ', ',
+            style: TextStyle(color: Colors.black87),
+          ),
+        );
+      }
       spans.add(
         const TextSpan(
-          text: 'fitness ',
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
-        ),
-      );
-      spans.add(
-        const TextSpan(
-          text: 'violation ',
-          style: TextStyle(color: Color(0xFF333333)),
+          text: 'Fitness Violation',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
     if (vehicle['registration'] == false) {
+      if (spans.isNotEmpty) {
+        spans.add(
+          const TextSpan(
+            text: ', ',
+            style: TextStyle(color: Colors.black87),
+          ),
+        );
+      }
       spans.add(
         const TextSpan(
-          text: 'registration ',
-          style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
-        ),
-      );
-      spans.add(
-        const TextSpan(
-          text: 'violation ',
-          style: TextStyle(color: Color(0xFF333333)),
+          text: 'Registration Violation',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
@@ -532,6 +645,8 @@ class _VehicleMonitoringScreenState
         children: spans,
         style: const TextStyle(fontSize: 13, fontFamily: 'Roboto'),
       ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -2339,7 +2454,7 @@ class _VehicleMonitoringScreenState
                                   const Expanded(
                                     flex: 5,
                                     child: Text(
-                                      'Remarks',
+                                      'Violation',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -2477,6 +2592,7 @@ class _VehicleMonitoringScreenState
                                               flex: 5,
                                               child: _buildRemarksRichText(
                                                 vehicle,
+                                                item,
                                               ),
                                             ),
                                             Expanded(
@@ -2643,16 +2759,65 @@ class _VehicleMonitoringScreenState
     return 'NON-COMPLIANT';
   }
 
-  String _deriveVehicleType(Map<String, dynamic> vehicle) {
-    final cat = vehicle['vehicleCategory']?.toString() ?? '';
-    final vt = vehicle['vehicleType']?.toString() ?? '';
-    if (cat == 'T' || vt.toLowerCase().contains('transport')) {
+  String _deriveVehicleType(
+    Map<String, dynamic> vehicle, [
+    Map<String, dynamic>? item,
+  ]) {
+    final cat = (vehicle['vehicleCategory'] ??
+            item?['vehicleCategory'] ??
+            vehicle['category'] ??
+            item?['category'] ??
+            '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final vt = (vehicle['vehicleType'] ??
+            item?['vehicleType'] ??
+            vehicle['vehicleClass'] ??
+            item?['vehicleClass'] ??
+            vehicle['type'] ??
+            item?['type'] ??
+            '')
+        .toString()
+        .trim();
+    final vtLower = vt.toLowerCase();
+
+    // 1. Non-Transport check (must precede Transport check because 'non-transport' contains 'transport')
+    if (cat == 'NT' ||
+        cat == 'N' ||
+        cat == 'NON-TRANSPORT' ||
+        cat == 'NON_TRANSPORT' ||
+        cat == 'NON TRANSPORT' ||
+        cat.contains('NON') ||
+        vtLower.contains('non') ||
+        vtLower.contains('motor car') ||
+        vtLower.contains('two wheeler') ||
+        vtLower.contains('motor cycle') ||
+        vtLower.contains('motorcycle') ||
+        vtLower.contains('scooter') ||
+        vtLower.contains('private')) {
+      return 'NON-TRANSPORT';
+    }
+
+    // 2. Transport check
+    if (cat == 'T' ||
+        cat == 'TRANSPORT' ||
+        vtLower.contains('transport')) {
       return 'TRANSPORT';
     }
-    if (cat == 'NT' || vt.toLowerCase().contains('non')) return 'NON-TRANSPORT';
-    if (vt.toLowerCase().contains('commercial')) return 'COMMERCIAL';
-    // Fallback: if no vehicleType info, derive from violations
-    if (vehicle['permit'] == false) return 'COMMERCIAL';
+
+    // 3. Commercial check
+    if (cat == 'C' ||
+        cat == 'COMMERCIAL' ||
+        vtLower.contains('commercial')) {
+      return 'COMMERCIAL';
+    }
+
+    // 4. Fallback: if permit violation exists on an unclassified vehicle, derive from violations
+    if (vehicle['permit'] == false || item?['permit'] == false) {
+      return 'COMMERCIAL';
+    }
+
     return 'NON-TRANSPORT';
   }
 
@@ -2732,8 +2897,10 @@ class _VehicleMonitoringScreenState
           _localVehicleType == 'Select All Vehicle Type' ||
           _localVehicleType.isEmpty;
       if (!matchesVehicleType) {
-        final derived = _deriveVehicleType(vehicle).toLowerCase();
-        matchesVehicleType = derived.contains(_localVehicleType.toLowerCase());
+        final derived = _deriveVehicleType(vehicle, item).toLowerCase();
+        final filter = _localVehicleType.toLowerCase().replaceAll('-', '').replaceAll(' ', '');
+        final cleanDerived = derived.replaceAll('-', '').replaceAll(' ', '');
+        matchesVehicleType = cleanDerived.contains(filter) || filter.contains(cleanDerived);
       }
 
       // Violation Type Filter
@@ -2798,7 +2965,8 @@ class _VehicleMonitoringScreenState
         } else if (_sortColumn == 'VehicleType') {
           cmp = _deriveVehicleType(
             vehicleA,
-          ).compareTo(_deriveVehicleType(vehicleB));
+            a,
+          ).compareTo(_deriveVehicleType(vehicleB, b));
         } else if (_sortColumn == 'Camera') {
           cmp = (vehicleA['cameraName']?.toString() ?? '').compareTo(
             vehicleB['cameraName']?.toString() ?? '',
@@ -3312,6 +3480,7 @@ class _VehicleMonitoringScreenState
                                             {};
                                         final typeLabel = _deriveVehicleType(
                                           vehicle,
+                                          item,
                                         );
                                         final violationText =
                                             _deriveViolationText(vehicle, item);
@@ -3324,9 +3493,9 @@ class _VehicleMonitoringScreenState
                                         Color typeBadgeBg;
                                         Color typeBadgeText;
                                         if (typeLabel == 'COMMERCIAL') {
-                                          typeBadgeBg = const Color(0xFFDBEAFE);
+                                          typeBadgeBg = const Color(0xFFEDE9FE);
                                           typeBadgeText = const Color(
-                                            0xFF1E40AF,
+                                            0xFF6D28D9,
                                           );
                                         } else if (typeLabel == 'TRANSPORT') {
                                           typeBadgeBg = const Color(0xFFDCFCE7);
@@ -3334,15 +3503,18 @@ class _VehicleMonitoringScreenState
                                             0xFF166534,
                                           );
                                         } else {
-                                          typeBadgeBg = const Color(0xFFDCFCE7);
+                                          // NON-TRANSPORT
+                                          typeBadgeBg = const Color(0xFFDBEAFE);
                                           typeBadgeText = const Color(
-                                            0xFF166534,
+                                            0xFF1E40AF,
                                           );
                                         }
 
                                         // Status badge color
                                         Color statusBadgeColor;
-                                        if (statusText == 'NA') {
+                                        if (statusText == 'NA' ||
+                                            statusText ==
+                                                'DETAILS NOT FOUND') {
                                           statusBadgeColor = const Color(
                                             0xFF7C3AED,
                                           );

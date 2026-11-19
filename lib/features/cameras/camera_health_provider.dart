@@ -162,3 +162,9 @@ final cameraHealthFilteredLocationsProvider =
             camera.contains(searchQuery);
       }).toList();
     });
+
+final allCameraLocationsProvider =
+    FutureProvider.autoDispose<List<CameraLocationItem>>((ref) async {
+      final repo = ref.watch(cameraHealthRepositoryProvider);
+      return repo.getAllCameraLocations();
+    });
