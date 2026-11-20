@@ -143,9 +143,9 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
                 title: 'Support Center',
                 subtitle: 'Create and review support tickets',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               SupportOverviewCard(total: total, open: open, closed: closed),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
               _buildToggleButton(),
               const SizedBox(height: 12),
               AnimatedSize(
@@ -158,9 +158,9 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
                       )
                     : const SizedBox.shrink(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               TicketSearchFilter(searchController: _searchController),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               if (state.isLoading)
                 const Center(child: CircularProgressIndicator())
               else if (state.error != null)

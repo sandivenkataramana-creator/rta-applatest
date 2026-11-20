@@ -693,7 +693,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       numberFormat: NumberFormat.compact(),
                                       axisLine: const AxisLine(width: 0),
                                     ),
-                                    tooltipBehavior: TooltipBehavior(enable: true),
+                                    tooltipBehavior: _buildRevenueTooltip(_getRevenueData(state.monthlyRevenue)),
                                     series: <ColumnSeries<_ChartData, String>>[
                                       ColumnSeries<_ChartData, String>(
                                         animationDuration: 0,
@@ -853,7 +853,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                             numberFormat: NumberFormat.compact(),
                                             axisLine: const AxisLine(width: 0),
                                           ),
-                                          tooltipBehavior: TooltipBehavior(enable: true),
+                                          tooltipBehavior: _buildRevenueTooltip(_getRevenueData(state.monthlyRevenue)),
                                           series: <ColumnSeries<_ChartData, String>>[
                                             ColumnSeries<_ChartData, String>(
                                               animationDuration: 0,
@@ -1154,6 +1154,65 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     } else {
       return '₹${value.toStringAsFixed(0)}';
     }
+  }
+
+  String _formatFullRevenue(num val) {
+    if (val == 0) return '₹ 0';
+    final hasDecimal = val % 1 != 0;
+    final format = hasDecimal
+        ? NumberFormat('#,##0.00', 'en_US')
+        : NumberFormat.decimalPattern('en_US');
+    return '₹ ${format.format(val)}';
+  }
+
+  TooltipBehavior _buildRevenueTooltip(List<_ChartData> chartData) {
+    return TooltipBehavior(
+      enable: true,
+      builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+        final _ChartData item = data is _ChartData
+            ? data
+            : (pointIndex >= 0 && pointIndex < chartData.length
+                ? chartData[pointIndex]
+                : const _ChartData('', 0, Colors.transparent));
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.label,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _formatFullRevenue(item.value),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   IconData _getMetricIcon(String title) {
@@ -1947,7 +2006,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: SfCartesianChart(
                       enableAxisAnimation: false,
                       margin: EdgeInsets.zero,
-                      tooltipBehavior: TooltipBehavior(enable: true),
+                      tooltipBehavior: _buildRevenueTooltip(_getRevenueData(state.monthlyRevenue)),
                       primaryXAxis: const CategoryAxis(
                         interval: 1,
                         labelRotation: 45,
@@ -2727,7 +2786,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         return SizedBox(
                           height: 340,
                           child: SfCartesianChart(
-                            tooltipBehavior: TooltipBehavior(enable: true),
+                            tooltipBehavior: _buildRevenueTooltip(_getRevenueData(state.monthlyRevenue)),
                             primaryXAxis: const CategoryAxis(
                               interval: 1,
                               labelRotation: 45,

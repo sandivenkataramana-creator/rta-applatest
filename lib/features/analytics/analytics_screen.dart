@@ -74,8 +74,11 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     if (val == null) return '₹ 0';
     final numVal = double.tryParse(val.toString()) ?? 0.0;
     if (numVal == 0.0) return '₹ 0';
-    final format = NumberFormat.decimalPattern('en_US');
-    return '₹ ${format.format(numVal.toInt())}';
+    final hasDecimal = numVal % 1 != 0;
+    final format = hasDecimal
+        ? NumberFormat('#,##0.00', 'en_US')
+        : NumberFormat.decimalPattern('en_US');
+    return '₹ ${format.format(numVal)}';
   }
 
   Widget _buildTopCard({
@@ -589,19 +592,65 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                         height: 320,
                         child: SfCartesianChart(
                           enableAxisAnimation: false,
-                          primaryXAxis: CategoryAxis(
-                            majorGridLines: const MajorGridLines(width: 0),
-                            labelStyle: const TextStyle(fontSize: 10),
+                          primaryXAxis: const CategoryAxis(
+                            interval: 1,
+                            majorGridLines: MajorGridLines(width: 0),
+                            labelStyle: TextStyle(fontSize: 9),
+                            labelIntersectAction: AxisLabelIntersectAction.rotate45,
                           ),
                           primaryYAxis: NumericAxis(
-                            title: AxisTitle(
+                            title: const AxisTitle(
                               text: 'Revenue (₹)',
-                              textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                              textStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                             numberFormat: NumberFormat.compact(),
                             axisLine: const AxisLine(width: 0),
                           ),
-                          tooltipBehavior: TooltipBehavior(enable: true),
+                          tooltipBehavior: TooltipBehavior(
+                            enable: true,
+                            builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+                              final MonthlyRevenueData item = data is MonthlyRevenueData
+                                  ? data
+                                  : chartData[pointIndex];
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F172A),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.month,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _formatAmount(item.revenue),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                           series: <ColumnSeries<MonthlyRevenueData, String>>[
                             ColumnSeries<MonthlyRevenueData, String>(
                               animationDuration: 0,
@@ -615,7 +664,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                               dataLabelSettings: const DataLabelSettings(
                                 isVisible: true,
                                 labelPosition: ChartDataLabelPosition.outside,
-                                textStyle: TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                                overflowMode: OverflowMode.none,
+                                labelIntersectAction: LabelIntersectAction.none,
+                                textStyle: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],

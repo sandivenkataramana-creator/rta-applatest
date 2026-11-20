@@ -69,7 +69,9 @@ class SupportState {
 
 class SupportController extends StateNotifier<SupportState> {
   SupportController(this._repository, this._storage)
-    : super(const SupportState());
+    : super(const SupportState()) {
+    loadTickets();
+  }
 
   final SupportRepository _repository;
   final SecureStorageService _storage;

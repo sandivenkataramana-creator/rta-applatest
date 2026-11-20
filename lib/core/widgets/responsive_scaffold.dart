@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../constants/app_constants.dart';
 import '../../features/auth/auth_notifier.dart';
-import '../../features/alerts/alerts_state.dart';
+import '../../features/support/presentation/providers/support_provider.dart';
+import '../../features/support/presentation/widgets/support_notifications_dialog.dart';
 
 final sidebarCollapsedProvider = StateProvider<bool>((ref) => true);
 
@@ -206,8 +207,11 @@ class _AppShellState extends ConsumerState<AppShell> {
           actions: [
             Builder(
               builder: (context) {
-                final alertsState = ref.watch(alertsNotifierProvider);
-                final alertCount = alertsState.items.length;
+                final supportState = ref.watch(supportControllerProvider);
+                final openCount =
+                    supportState.tickets.where((t) => t.isOpen).length;
+                final ticketCount =
+                    openCount > 0 ? openCount : supportState.tickets.length;
                 return Stack(
                   alignment: Alignment.center,
                   children: [
@@ -217,30 +221,40 @@ class _AppShellState extends ConsumerState<AppShell> {
                         color: Colors.white,
                         size: 24,
                       ),
+                      tooltip: 'Support Notifications',
                       onPressed: () {
-                        _navigateTo('/dashboard/alerts');
+                        showDialog(
+                          context: context,
+                          barrierDismissible: true,
+                          builder: (dialogCtx) => SupportNotificationsDialog(
+                            onNavigate: _navigateTo,
+                          ),
+                        );
                       },
                     ),
-                    if (alertCount > 0)
+                    if (ticketCount > 0)
                       Positioned(
                         right: 8,
                         top: 8,
                         child: IgnorePointer(
                           child: Container(
-                            padding: const EdgeInsets.all(2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
-                              color: Colors.red,
+                              color: const Color(0xFFEF4444),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             constraints: const BoxConstraints(
-                              minWidth: 14,
-                              minHeight: 14,
+                              minWidth: 16,
+                              minHeight: 16,
                             ),
                             child: Text(
-                              alertCount.toString(),
+                              ticketCount > 99 ? '99+' : ticketCount.toString(),
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 8,
+                                fontSize: 9,
                                 fontWeight: FontWeight.bold,
                               ),
                               textAlign: TextAlign.center,
